@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/activity.dart';
 import '../repositories/activity_repository.dart';
+import '../theme/app_theme.dart';
 
 class DumbbellsScreen extends StatefulWidget {
   final Activity activity;
@@ -93,7 +94,7 @@ class _DumbbellsScreenState extends State<DumbbellsScreen> {
                 Icon(
                   Icons.check_circle_outline,
                   size: 100,
-                  color: colorScheme.primary,
+                  color: context.appColors.completed,
                 ),
                 const SizedBox(height: 24),
                 Text(
@@ -101,7 +102,7 @@ class _DumbbellsScreenState extends State<DumbbellsScreen> {
                   textAlign: TextAlign.center,
                   style: theme.textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
-                    color: colorScheme.primary,
+                    color: context.appColors.completed,
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -114,39 +115,137 @@ class _DumbbellsScreenState extends State<DumbbellsScreen> {
                 ),
               ] else ...[
                 Container(
-                  padding: const EdgeInsets.all(32),
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
                   decoration: BoxDecoration(
-                    color: colorScheme.primaryContainer.withValues(alpha: 0.3),
-                    shape: BoxShape.circle,
+                    color: colorScheme.surface,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: colorScheme.outlineVariant,
+                      width: 1,
+                    ),
+                    boxShadow: Theme.of(context).brightness == Brightness.light
+                        ? const [
+                            BoxShadow(
+                              color: Color(0x08000000),
+                              blurRadius: 12,
+                              offset: Offset(0, 4),
+                            ),
+                          ]
+                        : null,
                   ),
                   child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Text(
-                        'Set',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          color: colorScheme.primary,
-                          fontWeight: FontWeight.w500,
+                      // Circular progress ring enclosing dumbbell icon
+                      SizedBox(
+                        width: 140,
+                        height: 140,
+                        child: Stack(
+                          alignment: Alignment.center,
+                          children: [
+                            SizedBox.expand(
+                              child: CircularProgressIndicator(
+                                value: (_currentSet - 1) / _totalSets,
+                                strokeWidth: 8,
+                                backgroundColor: colorScheme.surfaceContainerHighest,
+                                valueColor: AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                              ),
+                            ),
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.fitness_center,
+                                  size: 38,
+                                  color: context.appColors.primary,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Workout Session',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                                Text(
+                                  _activity.formattedDuration,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: colorScheme.outline,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
-                      Text(
-                        '$_currentSet/$_totalSets',
-                        style: theme.textTheme.displayLarge?.copyWith(
-                          color: colorScheme.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 64,
+                      const SizedBox(height: 24),
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        decoration: BoxDecoration(
+                          color: colorScheme.primaryContainer.withValues(alpha: 0.35),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            Column(
+                              children: [
+                                Text(
+                                  '$_currentSet/$_totalSets',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Sets',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.outline,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            Container(
+                              height: 30,
+                              width: 1,
+                              color: colorScheme.outlineVariant,
+                            ),
+                            Column(
+                              children: [
+                                Text(
+                                  '10-15',
+                                  style: TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                    color: colorScheme.onSurface,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Target Reps',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: colorScheme.outline,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 32),
-                Text(
-                  'Aim for 10-15 reps',
-                  style: theme.textTheme.titleMedium?.copyWith(
-                    color: colorScheme.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 48),
+                const SizedBox(height: 36),
                 SizedBox(
                   width: double.infinity,
                   height: 64,

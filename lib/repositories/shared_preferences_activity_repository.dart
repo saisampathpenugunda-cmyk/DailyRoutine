@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../controllers/routine_timer_controller.dart';
 import '../models/activity.dart';
 import '../models/day_history.dart';
 import '../models/reminder_config.dart';
@@ -11,31 +12,43 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
   static const String _storageKey = 'activities';
   static const String _historyKey = 'activity_history';
   static const String _lastDateKey = 'last_active_date';
+  static const String _firstTrackedDateKey = 'first_tracked_date';
   static const String _corruptedBackupKey = 'activities_corrupted_backup';
   static const String _remindersKey = 'activity_reminders';
+  static const String _timersKey = 'activity_timer_states';
   
   final SharedPreferences _prefs;
   final NotificationService? notificationService;
   final List<Activity> _activities = [];
   final List<DayHistory> _history = [];
   final Map<String, ReminderConfig> _reminderConfigs = {};
+  final Map<String, RoutineTimerController> _timerControllers = {};
+  final DateTime Function() _clock;
 
   SharedPreferencesActivityRepository(
     this._prefs, {
     this.notificationService,
-  }) {
+    DateTime? now,
+    DateTime Function()? clock,
+  }) : _clock = clock ?? (now != null ? () => now : () => DateTime.now()) {
     _loadAll();
   }
 
   static Future<SharedPreferencesActivityRepository> init({
     NotificationService? notificationService,
+    DateTime? now,
+    DateTime Function()? clock,
   }) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.reload();
-    return SharedPreferencesActivityRepository(
+    final repo = SharedPreferencesActivityRepository(
       prefs,
       notificationService: notificationService,
+      now: now,
+      clock: clock,
     );
+    await repo.checkDateRollover(now: now ?? repo._clock());
+    return repo;
   }
 
   String _formatDateKey(DateTime dt) {
@@ -49,7 +62,57 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
     _loadHistory();
     _loadActivities();
     _loadReminderConfigs();
-    _checkDateRollover();
+    _loadTimerStates();
+    checkDateRollover(now: _clock());
+  }
+
+  void _loadTimerStates() {
+    _timerControllers.clear();
+    final String? timersJson = _prefs.getString(_timersKey);
+    if (timersJson != null) {
+      try {
+        final dynamic decoded = jsonDecode(timersJson);
+        if (decoded is Map) {
+          for (final entry in decoded.entries) {
+            final key = entry.key.toString();
+            final val = entry.value;
+            if (val is Map) {
+              final act = getActivityById(key);
+              final ctrl = RoutineTimerController.fromJson(
+                Map<String, dynamic>.from(val),
+                fallbackTotalDuration: act?.defaultDuration,
+              );
+              _timerControllers[key] = ctrl;
+              _attachTimerListener(key, ctrl);
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('Error loading timer states: $e');
+      }
+    }
+  }
+
+  Future<void> _saveTimerStates() async {
+    try {
+      final Map<String, dynamic> data = {};
+      for (final entry in _timerControllers.entries) {
+        data[entry.key] = entry.value.toJson();
+      }
+      await _prefs.setString(_timersKey, jsonEncode(data));
+    } catch (e) {
+      debugPrint('Error saving timer states: $e');
+    }
+  }
+
+  void _attachTimerListener(String activityId, RoutineTimerController controller) {
+    TimerState lastState = controller.state;
+    controller.addListener(() {
+      if (controller.state != lastState) {
+        lastState = controller.state;
+        _saveTimerStates();
+      }
+    });
   }
 
   void _loadReminderConfigs() {
@@ -142,16 +205,17 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
     }
   }
 
-  void _checkDateRollover({DateTime? overrideNow}) {
-    final now = overrideNow ?? DateTime.now();
-    final todayKey = _formatDateKey(now);
+  @override
+  Future<bool> checkDateRollover({DateTime? now}) async {
+    final current = now ?? DateTime.now();
+    final todayKey = _formatDateKey(current);
     final lastActiveDate = _prefs.getString(_lastDateKey);
 
     if (lastActiveDate != null && lastActiveDate != todayKey) {
-      // Prior day completed or passed — archive prior day into history
-      _archiveDay(lastActiveDate);
+      // 1. Archive old day into DayHistory and persist
+      await _archiveDay(lastActiveDate, recordedAt: current);
 
-      // Start fresh for today: retain routine definitions, reset status
+      // 2. Reset activities for the new day
       for (int i = 0; i < _activities.length; i++) {
         _activities[i] = _activities[i].copyWith(
           isCompleted: false,
@@ -159,18 +223,38 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
           completedSetsReps: const [],
         );
       }
-      _prefs.setString(_lastDateKey, todayKey);
-      _saveActivities(currentDate: now);
-      notificationService?.rescheduleAll(getReminderConfigs(), _activities, testNow: now);
-    } else if (lastActiveDate == null) {
-      _prefs.setString(_lastDateKey, todayKey);
+
+      // 3. Clear/reset active timer state
+      for (final controller in _timerControllers.values) {
+        controller.reset();
+      }
+      await _prefs.remove(_timersKey);
+
+      // 4. Ensure all missing days are created at 0% and today's record exists at 0%
+      await _ensureDailyRecords(todayKey, current);
+
+      // 5. Set last_active_date to today's date
+      await _prefs.setString(_lastDateKey, todayKey);
+
+      // 6. Persist today's fresh activity state
+      await _saveActivities();
+
+      // 7. Reschedule reminders if required
+      notificationService?.rescheduleAll(getReminderConfigs(), _activities, testNow: current);
+      return true;
+    } else {
+      if (lastActiveDate == null) {
+        await _prefs.setString(_lastDateKey, todayKey);
+      }
+      // Ensure records up to today exist even on same-day runs or cold start
+      await _ensureDailyRecords(todayKey, current);
+      return false;
     }
   }
 
-  void _archiveDay(String dateKey, {DateTime? recordedAt}) {
+  Future<void> _archiveDay(String dateKey, {DateTime? recordedAt}) async {
     if (_activities.isEmpty) return;
 
-    // Check if already archived
     final existingIndex = _history.indexWhere((h) => h.dateKey == dateKey);
     final snapshot = DayHistory(
       dateKey: dateKey,
@@ -181,7 +265,140 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
     if (existingIndex != -1) {
       _history[existingIndex] = snapshot;
     } else {
-      _history.insert(0, snapshot);
+      _history.add(snapshot);
+    }
+    _history.sort((a, b) => b.dateKey.compareTo(a.dateKey));
+    await _saveHistory();
+  }
+
+  List<Activity> _createCleanActivitiesSnapshot() {
+    if (_activities.isNotEmpty) {
+      return _activities.map((a) => a.copyWith(
+        isCompleted: false,
+        isSkipped: false,
+        completedSetsReps: const [],
+      )).toList();
+    }
+    return const [
+      Activity(
+        id: 'meditation',
+        name: 'Meditation',
+        activityType: ActivityType.meditation,
+        defaultDuration: Duration(minutes: 10),
+        isCompleted: false,
+        isSkipped: false,
+      ),
+      Activity(
+        id: 'walking',
+        name: 'Walking',
+        activityType: ActivityType.walking,
+        defaultDuration: Duration(minutes: 30),
+        isCompleted: false,
+        isSkipped: false,
+      ),
+      Activity(
+        id: 'dumbbells',
+        name: 'Dumbbells',
+        activityType: ActivityType.dumbbells,
+        defaultDuration: Duration(minutes: 20),
+        isCompleted: false,
+        isSkipped: false,
+      ),
+    ];
+  }
+
+  String _determineFirstTrackedDate(String todayKey) {
+    final persisted = _prefs.getString(_firstTrackedDateKey);
+    if (persisted != null && persisted.isNotEmpty) {
+      return persisted;
+    }
+
+    String? earliest;
+    for (final h in _history) {
+      if (h.dateKey.isNotEmpty) {
+        if (earliest == null || h.dateKey.compareTo(earliest) < 0) {
+          earliest = h.dateKey;
+        }
+      }
+    }
+
+    final lastDate = _prefs.getString(_lastDateKey);
+    if (lastDate != null && lastDate.isNotEmpty) {
+      if (earliest == null || lastDate.compareTo(earliest) < 0) {
+        earliest = lastDate;
+      }
+    }
+
+    final firstDate = earliest ?? todayKey;
+    _prefs.setString(_firstTrackedDateKey, firstDate);
+    return firstDate;
+  }
+
+  Future<void> _ensureDailyRecords(String todayKey, DateTime current) async {
+    final firstTrackedKey = _determineFirstTrackedDate(todayKey);
+
+    DateTime parseKey(String k) {
+      final parts = k.split('-');
+      return DateTime(int.parse(parts[0]), int.parse(parts[1]), int.parse(parts[2]));
+    }
+
+    final firstDate = parseKey(firstTrackedKey);
+    final todayDate = parseKey(todayKey);
+
+    bool changed = false;
+
+    DateTime cursor = firstDate;
+    while (!cursor.isAfter(todayDate)) {
+      final key = _formatDateKey(cursor);
+      final existingIndex = _history.indexWhere((h) => h.dateKey == key);
+
+      if (key == todayKey) {
+        final todaySnapshot = DayHistory(
+          dateKey: todayKey,
+          activities: List.of(_activities),
+          recordedAt: current,
+        );
+        if (existingIndex != -1) {
+          _history[existingIndex] = todaySnapshot;
+        } else {
+          _history.add(todaySnapshot);
+        }
+        changed = true;
+      } else {
+        if (existingIndex == -1) {
+          _history.add(DayHistory(
+            dateKey: key,
+            activities: _createCleanActivitiesSnapshot(),
+            recordedAt: cursor,
+          ));
+          changed = true;
+        }
+      }
+
+      cursor = DateTime(cursor.year, cursor.month, cursor.day + 1);
+    }
+
+    _history.sort((a, b) => b.dateKey.compareTo(a.dateKey));
+
+    if (changed) {
+      await _saveHistory();
+    }
+  }
+
+  void _syncTodayHistory({DateTime? now}) {
+    final current = now ?? _clock();
+    final todayKey = _formatDateKey(current);
+    final snapshot = DayHistory(
+      dateKey: todayKey,
+      activities: List.of(_activities),
+      recordedAt: current,
+    );
+    final index = _history.indexWhere((h) => h.dateKey == todayKey);
+    if (index != -1) {
+      _history[index] = snapshot;
+    } else {
+      _history.add(snapshot);
+      _history.sort((a, b) => b.dateKey.compareTo(a.dateKey));
     }
     _saveHistory();
   }
@@ -216,15 +433,12 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
     _saveActivities();
   }
 
-  Future<void> _saveActivities({DateTime? currentDate}) async {
+  Future<void> _saveActivities() async {
     try {
       final String encodedList = jsonEncode(
         _activities.map((activity) => activity.toJson()).toList(),
       );
       await _prefs.setString(_storageKey, encodedList);
-
-      final todayKey = _formatDateKey(currentDate ?? DateTime.now());
-      await _prefs.setString(_lastDateKey, todayKey);
     } catch (e) {
       debugPrint('Error saving activities to SharedPreferences: $e');
     }
@@ -270,9 +484,14 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
         isSkipped: false,
       );
       _saveActivities();
+      _syncTodayHistory();
       if (willBeCompleted) {
         notificationService?.cancelActivityReminders(id);
+        _timerControllers[id]?.finish();
+      } else {
+        _timerControllers[id]?.reset();
       }
+      _saveTimerStates();
     }
   }
 
@@ -285,9 +504,14 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
         isSkipped: false,
       );
       _saveActivities();
+      _syncTodayHistory();
       if (isCompleted) {
         notificationService?.cancelActivityReminders(id);
+        _timerControllers[id]?.finish();
+      } else {
+        _timerControllers[id]?.reset();
       }
+      _saveTimerStates();
     }
   }
 
@@ -300,9 +524,12 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
         isCompleted: false,
       );
       _saveActivities();
+      _syncTodayHistory();
       if (isSkipped) {
         notificationService?.cancelActivityReminders(id);
+        _timerControllers[id]?.reset();
       }
+      _saveTimerStates();
     }
   }
 
@@ -315,6 +542,7 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
       _activities.add(activity);
     }
     _saveActivities();
+    _syncTodayHistory();
   }
 
   @override
@@ -323,6 +551,7 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
     if (index != -1) {
       _activities[index] = activity;
       _saveActivities();
+      _syncTodayHistory();
       if (activity.isCompleted || activity.isSkipped) {
         notificationService?.cancelActivityReminders(activity.id);
       }
@@ -334,6 +563,7 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
     await _saveActivities();
     await _saveHistory();
     await _saveReminderConfigs();
+    await _saveTimerStates();
   }
 
   @override
@@ -358,10 +588,62 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
     );
   }
 
+  @override
+  RoutineTimerController getTimerController(
+    String activityId, {
+    Duration? defaultDuration,
+    DateTime Function()? now,
+  }) {
+    if (!_timerControllers.containsKey(activityId)) {
+      final activity = getActivityById(activityId);
+      final duration = defaultDuration ?? activity?.defaultDuration ?? const Duration(minutes: 10);
+      final isDone = activity?.isCompleted ?? false;
+      final controller = RoutineTimerController(
+        totalDuration: duration,
+        initialState: isDone ? TimerState.completed : TimerState.initial,
+        initialRemaining: isDone ? Duration.zero : duration,
+        now: now ?? _clock,
+      );
+      _timerControllers[activityId] = controller;
+      _attachTimerListener(activityId, controller);
+    }
+    return _timerControllers[activityId]!;
+  }
+
+  @override
+  void resetTimer(String activityId) {
+    _timerControllers[activityId]?.reset();
+    _saveTimerStates();
+  }
+
+  @override
+  double getActivityProgress(Activity activity) {
+    if (activity.isCompleted) return 1.0;
+    if (activity.isSkipped) return 0.0;
+
+    if (activity.activityType == ActivityType.meditation ||
+        activity.activityType == ActivityType.walking) {
+      final controller = getTimerController(
+        activity.id,
+        defaultDuration: activity.defaultDuration,
+      );
+      return controller.completionProgress;
+    }
+
+    if (activity.activityType == ActivityType.dumbbells) {
+      if (activity.completedSetsReps.isNotEmpty) {
+        return (activity.completedSetsReps.length / 3.0).clamp(0.0, 1.0);
+      }
+      return 0.0;
+    }
+
+    return 0.0;
+  }
+
   /// Exposed for testing date rollover behavior.
   @visibleForTesting
   Future<void> simulateDateRollover(DateTime newDate) async {
-    _checkDateRollover(overrideNow: newDate);
+    await checkDateRollover(now: newDate);
     await flush();
   }
 }

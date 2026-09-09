@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import '../models/activity.dart';
 import '../models/day_history.dart';
 import '../repositories/activity_repository.dart';
@@ -33,6 +33,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+
     if (_history.isEmpty) {
       return Center(
         child: Padding(
@@ -44,35 +46,35 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 width: 64,
                 height: 64,
                 decoration: BoxDecoration(
-                  color: AppTheme.slate100,
+                  color: colors.barBackground,
                   borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
                   border: Border.all(
-                    color: AppTheme.slate200,
+                    color: colors.border,
                     width: AppTheme.borderWidth,
                   ),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.history_toggle_off,
                   size: 32,
-                  color: AppTheme.slate500,
+                  color: colors.secondary,
                 ),
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'No History Recorded Yet',
                 style: TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.slate900,
+                  color: colors.textMain,
                 ),
               ),
               const SizedBox(height: 6),
-              const Text(
+              Text(
                 'Complete your routines today. All past data will be archived and viewable here across days.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 14,
-                  color: AppTheme.slate500,
+                  color: colors.textSecondary,
                   height: 1.4,
                 ),
               ),
@@ -100,18 +102,21 @@ class _DayHistoryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final is100Percent = day.isAllCompleted;
-    final badgeColor = is100Percent ? AppTheme.emeraldGreen : AppTheme.amberWarning;
+    final badgeColor = is100Percent ? colors.completed : colors.skipped;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12.0),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+        color: colors.card,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
         border: Border.all(
-          color: AppTheme.slate200,
+          color: colors.border,
           width: AppTheme.borderWidth,
         ),
+        boxShadow: isDark ? null : AppTheme.lightCardShadow,
       ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -123,18 +128,18 @@ class _DayHistoryCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.calendar_today_outlined,
-                      size: 16,
-                      color: AppTheme.slate700,
+                      size: 15,
+                      color: colors.secondary,
                     ),
                     const SizedBox(width: 8),
                     Text(
                       day.displayTitle,
-                      style: const TextStyle(
-                        fontSize: 16,
+                      style: TextStyle(
+                        fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: AppTheme.slate900,
+                        color: colors.textMain,
                       ),
                     ),
                   ],
@@ -142,10 +147,10 @@ class _DayHistoryCard extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: badgeColor.withValues(alpha: 0.1),
+                    color: badgeColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
                     border: Border.all(
-                      color: badgeColor.withValues(alpha: 0.3),
+                      color: badgeColor.withValues(alpha: 0.35),
                       width: 1,
                     ),
                   ),
@@ -161,9 +166,9 @@ class _DayHistoryCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            const Divider(color: AppTheme.slate200, height: 1),
             const SizedBox(height: 10),
+            Divider(color: colors.border, height: 1),
+            const SizedBox(height: 8),
             ...day.activities.map((activity) => _ActivityHistoryRow(activity: activity)),
           ],
         ),
@@ -179,11 +184,12 @@ class _ActivityHistoryRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
     final statusColor = activity.isCompleted
-        ? AppTheme.emeraldGreen
+        ? colors.completed
         : activity.isSkipped
-            ? AppTheme.crimsonRed
-            : AppTheme.slate400;
+            ? colors.skipped
+            : colors.secondary;
 
     final statusIcon = activity.isCompleted
         ? Icons.check_circle
@@ -197,31 +203,62 @@ class _ActivityHistoryRow extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4.0),
+      padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Row(
         children: [
-          Icon(statusIcon, size: 16, color: statusColor),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              activity.name,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: activity.isCompleted || activity.isSkipped
-                    ? AppTheme.slate900
-                    : AppTheme.slate500,
+          // Circular activity icon container
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: colors.highlight,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: activity.isCompleted
+                    ? colors.completed.withValues(alpha: 0.25)
+                    : colors.border,
+                width: 1,
               ),
             ),
-          ),
-          Text(
-            details,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppTheme.slate500,
-              fontFeatures: [FontFeature.tabularFigures()],
+            child: Icon(
+              activity.activityType.icon,
+              size: 16,
+              color: activity.isCompleted
+                  ? colors.completed
+                  : activity.isSkipped
+                      ? colors.skipped
+                      : colors.primary,
             ),
           ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  activity.name,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: activity.isCompleted
+                        ? colors.completed
+                        : activity.isSkipped
+                            ? colors.textSecondary
+                            : colors.textMain,
+                  ),
+                ),
+                Text(
+                  details,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: colors.textSecondary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Icon(statusIcon, size: 18, color: statusColor),
         ],
       ),
     );

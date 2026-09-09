@@ -34,10 +34,14 @@ class DayHistory {
         final date = DateTime(year, month, day);
         final now = DateTime.now();
         final today = DateTime(now.year, now.month, now.day);
-        final difference = today.difference(date).inDays;
+        final yesterday = DateTime(now.year, now.month, now.day - 1);
 
-        if (difference == 0) return 'Today';
-        if (difference == 1) return 'Yesterday';
+        if (date.year == today.year && date.month == today.month && date.day == today.day) {
+          return 'Today';
+        }
+        if (date.year == yesterday.year && date.month == yesterday.month && date.day == yesterday.day) {
+          return 'Yesterday';
+        }
 
         const months = [
           'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',

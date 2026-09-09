@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:daily_routine/main.dart';
 import 'package:daily_routine/models/activity.dart';
 import 'package:daily_routine/repositories/activity_repository.dart';
 import 'package:daily_routine/screens/dumbbells_screen.dart';
@@ -175,5 +176,42 @@ void main() {
       expect(find.byType(AlertDialog), findsNothing);
       expect(find.text('2/3'), findsOneWidget);
     });
+
+    testWidgets(
+      'completing Set 1, navigating back to Home, and reopening Dumbbells preserves Set 2 position',
+      (tester) async {
+        final repo = InMemoryActivityRepository();
+        await tester.pumpWidget(DailyRoutineApp(repository: repo));
+
+        // 1. Open Dumbbells
+        await tester.tap(find.text('Dumbbells'));
+        await tester.pumpAndSettle();
+        expect(find.text('1/3'), findsOneWidget);
+        expect(find.text('Complete Set 1'), findsOneWidget);
+
+        // 2. Complete Set 1 with 12 reps
+        await tester.tap(find.text('Complete Set 1'));
+        await tester.pumpAndSettle();
+        await tester.enterText(find.byType(TextField), '12');
+        await tester.tap(find.text('Save'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('2/3'), findsOneWidget);
+        expect(find.text('Complete Set 2'), findsOneWidget);
+
+        // 3. Navigate back to Home
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+        expect(find.text('Daily Routine'), findsOneWidget);
+
+        // 4. Reopen Dumbbells
+        await tester.tap(find.text('Dumbbells'));
+        await tester.pumpAndSettle();
+
+        // 5. Verify it is still at Set 2 of 3
+        expect(find.text('2/3'), findsOneWidget);
+        expect(find.text('Complete Set 2'), findsOneWidget);
+      },
+    );
   });
 }

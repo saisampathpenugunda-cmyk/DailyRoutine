@@ -47,12 +47,13 @@ class _ReminderSettingsScreenState extends State<ReminderSettingsScreen> {
     required int initialMinute,
     required ValueChanged<TimeOfDay> onPicked,
   }) async {
+    final theme = Theme.of(context);
     final picked = await showTimePicker(
       context: context,
       initialTime: TimeOfDay(hour: initialHour, minute: initialMinute),
       builder: (context, child) {
         return Theme(
-          data: AppTheme.lightTheme.copyWith(
+          data: theme.copyWith(
             timePickerTheme: TimePickerThemeData(
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
@@ -108,11 +109,16 @@ class _ReminderSettingsScreenState extends State<ReminderSettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text(
+        title: Text(
           'Reminders',
-          style: TextStyle(fontWeight: FontWeight.w700),
+          style: TextStyle(
+            color: colors.textMain,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         elevation: 0,
       ),
@@ -122,27 +128,27 @@ class _ReminderSettingsScreenState extends State<ReminderSettingsScreen> {
           Container(
             padding: const EdgeInsets.all(14.0),
             decoration: BoxDecoration(
-              color: AppTheme.cobaltBlue.withValues(alpha: 0.08),
+              color: colors.primary.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
               border: Border.all(
-                color: AppTheme.cobaltBlue.withValues(alpha: 0.25),
+                color: colors.border,
                 width: AppTheme.borderWidth,
               ),
             ),
             child: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.notifications_active_outlined,
-                  color: AppTheme.cobaltBlue,
+                  color: colors.primary,
                   size: 24,
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Reminders trigger even when the app is closed. Completing or skipping an activity automatically cancels today’s remaining alerts.',
                     style: TextStyle(
                       fontSize: 13,
-                      color: AppTheme.slate700,
+                      color: colors.textSecondary,
                       height: 1.35,
                     ),
                   ),
@@ -150,7 +156,7 @@ class _ReminderSettingsScreenState extends State<ReminderSettingsScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           ..._configs.map((config) {
             final activity = _activities.cast<Activity?>().firstWhere(
                   (a) => a?.id == config.activityId,
@@ -225,18 +231,22 @@ class _ReminderCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
     final isCompleted = activity?.isCompleted ?? false;
     final isSkipped = activity?.isSkipped ?? false;
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 14.0),
+      margin: const EdgeInsets.only(bottom: 12.0),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+        color: colors.card,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
         border: Border.all(
-          color: AppTheme.slate200,
+          color: colors.border,
           width: AppTheme.borderWidth,
         ),
+        boxShadow: isDark ? null : AppTheme.lightCardShadow,
       ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
@@ -247,17 +257,17 @@ class _ReminderCard extends StatelessWidget {
             Row(
               children: [
                 Container(
-                  width: 38,
-                  height: 38,
+                  width: 40,
+                  height: 40,
                   decoration: BoxDecoration(
-                    color: AppTheme.cobaltBlue.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+                    color: colors.highlight,
+                    shape: BoxShape.circle,
                     border: Border.all(
-                      color: AppTheme.cobaltBlue.withValues(alpha: 0.2),
+                      color: colors.border,
                       width: 1,
                     ),
                   ),
-                  child: Icon(icon, color: AppTheme.cobaltBlue, size: 22),
+                  child: Icon(icon, color: colors.primary, size: 20),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -266,22 +276,22 @@ class _ReminderCard extends StatelessWidget {
                     children: [
                       Text(
                         displayName,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w700,
-                          color: AppTheme.slate900,
+                          color: colors.textMain,
                         ),
                       ),
                       const SizedBox(height: 2),
-                      _buildStatusHint(isCompleted, isSkipped),
+                      _buildStatusHint(colors, isCompleted, isSkipped),
                     ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-            const Divider(color: AppTheme.slate200, height: 1),
             const SizedBox(height: 12),
+            Divider(color: colors.border, height: 1),
+            const SizedBox(height: 10),
 
             // Main Reminder Row
             Row(
@@ -289,14 +299,14 @@ class _ReminderCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.alarm, size: 18, color: AppTheme.slate700),
+                    Icon(Icons.alarm, size: 17, color: colors.secondary),
                     const SizedBox(width: 8),
-                    const Text(
+                    Text(
                       'Main Reminder',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: AppTheme.slate900,
+                        color: colors.textMain,
                       ),
                     ),
                   ],
@@ -309,10 +319,10 @@ class _ReminderCard extends StatelessWidget {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                         decoration: BoxDecoration(
-                          color: config.isMainEnabled ? AppTheme.slate100 : AppTheme.slate50,
+                          color: config.isMainEnabled ? colors.barBackground : colors.card,
                           borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
                           border: Border.all(
-                            color: config.isMainEnabled ? AppTheme.slate300 : AppTheme.slate200,
+                            color: colors.border,
                             width: 1,
                           ),
                         ),
@@ -321,7 +331,7 @@ class _ReminderCard extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
-                            color: config.isMainEnabled ? AppTheme.slate900 : AppTheme.slate400,
+                            color: config.isMainEnabled ? colors.textMain : colors.secondary,
                           ),
                         ),
                       ),
@@ -329,7 +339,8 @@ class _ReminderCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     Switch(
                       value: config.isMainEnabled,
-                      activeThumbColor: AppTheme.cobaltBlue,
+                      activeThumbColor: colors.primary,
+                      activeTrackColor: colors.primary.withValues(alpha: 0.3),
                       onChanged: onToggleMain,
                     ),
                   ],
@@ -337,7 +348,7 @@ class _ReminderCard extends StatelessWidget {
               ],
             ),
 
-            const SizedBox(height: 10),
+            const SizedBox(height: 8),
 
             // Backup Reminder Row
             Row(
@@ -345,14 +356,14 @@ class _ReminderCard extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.add_alert_outlined, size: 18, color: AppTheme.slate700),
+                    Icon(Icons.add_alert_outlined, size: 17, color: colors.secondary),
                     const SizedBox(width: 8),
-                    const Text(
+                    Text(
                       'Backup Reminder',
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: AppTheme.slate900,
+                        color: colors.textMain,
                       ),
                     ),
                   ],
@@ -366,19 +377,19 @@ class _ReminderCard extends StatelessWidget {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                           decoration: BoxDecoration(
-                            color: AppTheme.slate100,
+                            color: colors.barBackground,
                             borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
                             border: Border.all(
-                              color: AppTheme.slate300,
+                              color: colors.border,
                               width: 1,
                             ),
                           ),
                           child: Text(
                             config.formattedBackupTime,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 13,
                               fontWeight: FontWeight.w700,
-                              color: AppTheme.slate900,
+                              color: colors.textMain,
                             ),
                           ),
                         ),
@@ -387,7 +398,8 @@ class _ReminderCard extends StatelessWidget {
                     ],
                     Switch(
                       value: config.isBackupEnabled,
-                      activeThumbColor: AppTheme.cobaltBlue,
+                      activeThumbColor: colors.primary,
+                      activeTrackColor: colors.primary.withValues(alpha: 0.3),
                       onChanged: onToggleBackup,
                     ),
                   ],
@@ -400,36 +412,36 @@ class _ReminderCard extends StatelessWidget {
     );
   }
 
-  Widget _buildStatusHint(bool isCompleted, bool isSkipped) {
+  Widget _buildStatusHint(AppThemeColors colors, bool isCompleted, bool isSkipped) {
     if (isCompleted) {
-      return const Text(
+      return Text(
         "Today's alerts cancelled (completed)",
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: AppTheme.emeraldGreen,
+          color: colors.completed,
         ),
       );
     }
     if (isSkipped) {
-      return const Text(
+      return Text(
         "Today's alerts cancelled (skipped)",
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w600,
-          color: AppTheme.crimsonRed,
+          color: colors.skipped,
         ),
       );
     }
     if (!config.isMainEnabled && !config.isBackupEnabled) {
-      return const Text(
+      return Text(
         'Reminders disabled',
-        style: TextStyle(fontSize: 12, color: AppTheme.slate400),
+        style: TextStyle(fontSize: 12, color: colors.secondary),
       );
     }
     return Text(
       'Next alert: Today at ${config.formattedMainTime}',
-      style: const TextStyle(fontSize: 12, color: AppTheme.slate500),
+      style: TextStyle(fontSize: 12, color: colors.textSecondary),
     );
   }
 }

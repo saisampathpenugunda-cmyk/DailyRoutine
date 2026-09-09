@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/activity.dart';
+import '../theme/app_theme.dart';
 
 class ActivityDetailScreen extends StatelessWidget {
   final Activity activity;
@@ -9,29 +10,11 @@ class ActivityDetailScreen extends StatelessWidget {
     required this.activity,
   });
 
-  IconData _getIconForType(ActivityType type) {
-    switch (type) {
-      case ActivityType.meditation:
-        return Icons.self_improvement;
-      case ActivityType.walking:
-        return Icons.directions_walk;
-      case ActivityType.dumbbells:
-        return Icons.fitness_center;
-      case ActivityType.study:
-        return Icons.school;
-      case ActivityType.guitar:
-        return Icons.music_note;
-      case ActivityType.reading:
-        return Icons.menu_book;
-      case ActivityType.general:
-        return Icons.task_alt;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
+    final colors = context.appColors;
 
     return Scaffold(
       appBar: AppBar(
@@ -47,13 +30,21 @@ class ActivityDetailScreen extends StatelessWidget {
               width: 96,
               height: 96,
               decoration: BoxDecoration(
-                color: colorScheme.primaryContainer,
+                color: colors.highlight,
                 borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: activity.isCompleted
+                      ? colors.completed.withValues(alpha: 0.25)
+                      : colors.border,
+                  width: 1,
+                ),
               ),
               child: Icon(
-                _getIconForType(activity.activityType),
+                activity.activityType.icon,
                 size: 48,
-                color: colorScheme.onPrimaryContainer,
+                color: activity.isCompleted
+                    ? colors.completed
+                    : colors.primary,
               ),
             ),
             const SizedBox(height: 24),
@@ -99,7 +90,7 @@ class ActivityDetailScreen extends StatelessWidget {
                       label: 'Status',
                       value: activity.isCompleted ? 'Completed' : 'Pending',
                       valueColor: activity.isCompleted
-                          ? Colors.green
+                          ? context.appColors.completed
                           : colorScheme.outline,
                     ),
                   ],

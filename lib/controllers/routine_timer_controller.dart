@@ -7,6 +7,7 @@ enum TimerState { initial, running, paused, completed }
 /// on every tick.
 class RoutineTimerController {
   final Duration totalDuration;
+  final DateTime Function() _now;
 
   TimerState _state = TimerState.initial;
   Duration _remaining;
@@ -17,13 +18,22 @@ class RoutineTimerController {
   /// Listeners to notify on every state / tick change.
   final List<void Function()> _listeners = [];
 
-  RoutineTimerController({required this.totalDuration})
-      : _remaining = totalDuration;
+  RoutineTimerController({
+    required this.totalDuration,
+    Duration? initialRemaining,
+    TimerState initialState = TimerState.initial,
+    DateTime? initialEndTime,
+    DateTime Function()? now,
+  })  : _remaining = initialRemaining ?? totalDuration,
+        _state = initialState,
+        _endTime = initialEndTime,
+        _now = now ?? DateTime.now;
 
   // ── Getters ──────────────────────────────────────────────────────────────
 
   TimerState get state => _state;
   Duration get remaining => _remaining;
+  DateTime? get endTime => _endTime;
   bool get isInitial => _state == TimerState.initial;
   bool get isRunning => _state == TimerState.running;
   bool get isPaused => _state == TimerState.paused;
@@ -41,6 +51,16 @@ class RoutineTimerController {
   double get progress {
     if (totalDuration == Duration.zero || totalDuration.inMilliseconds == 0) return 0;
     return _remaining.inMilliseconds / totalDuration.inMilliseconds;
+  }
+
+  /// Completion progress from 0.0 (not started) to 1.0 (fully completed).
+  double get completionProgress {
+    if (totalDuration == Duration.zero || totalDuration.inMilliseconds == 0) return 0.0;
+    if (_state == TimerState.completed) return 1.0;
+    if (_state == TimerState.initial) return 0.0;
+    final currentRemaining = isRunning ? _computeRemaining() : _remaining;
+    final elapsedMs = totalDuration.inMilliseconds - currentRemaining.inMilliseconds;
+    return (elapsedMs / totalDuration.inMilliseconds).clamp(0.0, 1.0);
   }
 
   // ── Listener management ──────────────────────────────────────────────────
@@ -64,7 +84,7 @@ class RoutineTimerController {
   /// Starts the countdown from `totalDuration`.
   void start() {
     if (_state != TimerState.initial) return;
-    _endTime = DateTime.now().add(_remaining);
+    _endTime = _now().add(_remaining);
     _state = TimerState.running;
     _notify();
   }
@@ -81,7 +101,7 @@ class RoutineTimerController {
   /// Resumes a paused timer.
   void resume() {
     if (_state != TimerState.paused) return;
-    _endTime = DateTime.now().add(_remaining);
+    _endTime = _now().add(_remaining);
     _state = TimerState.running;
     _notify();
   }
@@ -127,7 +147,65 @@ class RoutineTimerController {
 
   Duration _computeRemaining() {
     if (_endTime == null) return _remaining;
-    final r = _endTime!.difference(DateTime.now());
+    final r = _endTime!.difference(_now());
     return r.isNegative ? Duration.zero : r;
+  }
+
+  // ── Serialization ────────────────────────────────────────────────────────
+
+  Map<String, dynamic> toJson() {
+    return {
+      'totalDurationSeconds': totalDuration.inSeconds,
+      'remainingSeconds': _remaining.inSeconds,
+      'state': _state.name,
+      'endTime': _endTime?.millisecondsSinceEpoch,
+    };
+  }
+
+  factory RoutineTimerController.fromJson(
+    Map<String, dynamic> json, {
+    Duration? fallbackTotalDuration,
+    DateTime Function()? now,
+  }) {
+    final clock = now ?? DateTime.now;
+    final totalSec = (json['totalDurationSeconds'] as num?)?.toInt() ??
+        fallbackTotalDuration?.inSeconds ??
+        600;
+    final remSec = (json['remainingSeconds'] as num?)?.toInt() ?? totalSec;
+    final stateStr = json['state'] as String? ?? 'initial';
+    final state = TimerState.values.firstWhere(
+      (s) => s.name == stateStr,
+      orElse: () => TimerState.initial,
+    );
+    final endTimeMs = (json['endTime'] as num?)?.toInt();
+    final endTime = endTimeMs != null
+        ? DateTime.fromMillisecondsSinceEpoch(endTimeMs)
+        : null;
+
+    final totalDuration = Duration(seconds: totalSec);
+    var remaining = Duration(seconds: remSec);
+    var effectiveState = state;
+
+    if (state == TimerState.running) {
+      if (endTime != null) {
+        final current = clock();
+        if (current.isAfter(endTime)) {
+          remaining = Duration.zero;
+          effectiveState = TimerState.completed;
+        } else {
+          remaining = endTime.difference(current);
+        }
+      }
+    } else if (state == TimerState.completed) {
+      remaining = Duration.zero;
+    }
+
+    return RoutineTimerController(
+      totalDuration: totalDuration,
+      initialRemaining: remaining,
+      initialState: effectiveState,
+      initialEndTime: effectiveState == TimerState.running ? endTime : null,
+      now: now,
+    );
   }
 }

@@ -173,5 +173,117 @@ void main() {
         expect(find.text('1 of 3 activities completed'), findsOneWidget);
       },
     );
+
+    testWidgets(
+      'Start -> Pause -> Back -> Reopen preserves paused state and does not decrease time',
+      (tester) async {
+        var simulatedNow = DateTime(2026, 9, 9, 8, 0, 0);
+        final repo = InMemoryActivityRepository();
+        repo.getTimerController('meditation', now: () => simulatedNow);
+        await tester.pumpWidget(DailyRoutineApp(repository: repo));
+
+        // 1. Open Meditation
+        await tester.tap(find.text('Meditation'));
+        await tester.pumpAndSettle();
+        expect(find.text('10:00'), findsOneWidget);
+
+        // 2. Start timer and let run 2 seconds
+        await tester.tap(find.byKey(const Key('start_button')));
+        await tester.pump();
+        simulatedNow = simulatedNow.add(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        simulatedNow = simulatedNow.add(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+
+        // 3. Pause timer
+        await tester.tap(find.byKey(const Key('pause_button')));
+        await tester.pump();
+        expect(find.text('09:58'), findsOneWidget);
+        expect(find.text('Paused'), findsOneWidget);
+
+        // 4. Navigate back to Home screen
+        final backButton = find.byType(BackButton);
+        expect(backButton, findsOneWidget);
+        await tester.tap(backButton);
+        await tester.pumpAndSettle();
+        expect(find.text('Daily Routine'), findsOneWidget);
+
+        // 5. Stay away on Home screen for 5 minutes (paused time must NOT decrease)
+        simulatedNow = simulatedNow.add(const Duration(minutes: 5));
+        await tester.pump(const Duration(minutes: 5));
+
+        // 6. Reopen Meditation
+        await tester.tap(find.text('Meditation'));
+        await tester.pumpAndSettle();
+
+        // 7. Verify timer is still PAUSED with 09:58 remaining
+        expect(find.text('09:58'), findsOneWidget);
+        expect(find.text('Paused'), findsOneWidget);
+        expect(find.byKey(const Key('resume_button')), findsOneWidget);
+        expect(find.byKey(const Key('finish_early_button')), findsOneWidget);
+        expect(find.byKey(const Key('start_button')), findsNothing);
+
+        // 8. Tap Resume and verify countdown resumes from 09:58
+        await tester.tap(find.byKey(const Key('resume_button')));
+        await tester.pump();
+        expect(find.text('Running'), findsOneWidget);
+
+        simulatedNow = simulatedNow.add(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.text('09:57'), findsOneWidget);
+
+        // 9. Finish early
+        await tester.tap(find.byKey(const Key('pause_button')));
+        await tester.pump();
+        await tester.tap(find.byKey(const Key('finish_early_button')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Completed!'), findsOneWidget);
+        await tester.tap(find.byKey(const Key('done_button')));
+        await tester.pumpAndSettle();
+
+        expect(find.text('1 of 3 activities completed'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'Running timer preserves state and elapsed wall-clock time across navigation',
+      (tester) async {
+        var simulatedNow = DateTime(2026, 9, 9, 8, 0, 0);
+        final repo = InMemoryActivityRepository();
+        repo.getTimerController('meditation', now: () => simulatedNow);
+        await tester.pumpWidget(DailyRoutineApp(repository: repo));
+
+        // 1. Open Meditation and start timer
+        await tester.tap(find.text('Meditation'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.byKey(const Key('start_button')));
+        await tester.pump();
+        simulatedNow = simulatedNow.add(const Duration(seconds: 1));
+        await tester.pump(const Duration(seconds: 1));
+        expect(find.text('Running'), findsOneWidget);
+
+        // 2. Navigate back to Home while running
+        await tester.tap(find.byType(BackButton));
+        await tester.pumpAndSettle();
+
+        // 3. 3 seconds pass
+        simulatedNow = simulatedNow.add(const Duration(seconds: 3));
+        await tester.pump(const Duration(seconds: 3));
+
+        // 4. Reopen Meditation
+        await tester.tap(find.text('Meditation'));
+        await tester.pumpAndSettle();
+
+        // 5. Timer should still be running and shows approximately 09:56
+        expect(find.text('Running'), findsOneWidget);
+        expect(find.byKey(const Key('pause_button')), findsOneWidget);
+        expect(find.text('09:56'), findsOneWidget);
+
+        // Clean up: pause timer before test teardown
+        await tester.tap(find.byKey(const Key('pause_button')));
+        await tester.pump();
+      },
+    );
   });
 }

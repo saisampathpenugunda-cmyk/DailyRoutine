@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 import '../models/activity.dart';
@@ -39,8 +40,14 @@ class LocalNotificationService implements NotificationService {
   Future<void> init() async {
     if (_initialized) return;
 
-    // Initialize local timezone database
+    // Initialize local timezone database and configure device location
     tz_data.initializeTimeZones();
+    try {
+      final info = await FlutterTimezone.getLocalTimezone();
+      tz.setLocalLocation(tz.getLocation(info.identifier));
+    } catch (e) {
+      debugPrint('Notice: Local timezone configuration fallback to UTC/default: $e');
+    }
 
     const androidSettings = AndroidInitializationSettings('@mipmap/ic_launcher');
     const initSettings = InitializationSettings(android: androidSettings);
@@ -71,6 +78,11 @@ class LocalNotificationService implements NotificationService {
 
     if (androidPlugin != null) {
       final granted = await androidPlugin.requestNotificationsPermission();
+      try {
+        await androidPlugin.requestExactAlarmsPermission();
+      } catch (e) {
+        debugPrint('Notice: Exact alarm permission request: $e');
+      }
       return granted ?? false;
     }
     return false;
@@ -83,8 +95,12 @@ class LocalNotificationService implements NotificationService {
     required bool isSkippedToday,
     DateTime? testNow,
   }) async {
-    // First cancel existing scheduled reminders for this activity to avoid duplicates
-    await cancelActivityReminders(config.activityId);
+    // Cancel existing scheduled reminders for this activity to avoid duplicates
+    try {
+      await cancelActivityReminders(config.activityId);
+    } catch (e) {
+      debugPrint('Warning: Could not cancel existing reminders for ${config.activityId}: $e');
+    }
 
     // If main reminder is enabled
     if (config.isMainEnabled) {
@@ -130,13 +146,25 @@ class LocalNotificationService implements NotificationService {
   @override
   Future<void> cancelActivityReminders(String activityId) async {
     final defaults = ReminderConfig.defaultFor(activityId);
-    await _notificationsPlugin.cancel(defaults.mainNotificationId);
-    await _notificationsPlugin.cancel(defaults.backupNotificationId);
+    try {
+      await _notificationsPlugin.cancel(defaults.mainNotificationId);
+    } catch (e) {
+      debugPrint('Notice: cancel main reminder for $activityId: $e');
+    }
+    try {
+      await _notificationsPlugin.cancel(defaults.backupNotificationId);
+    } catch (e) {
+      debugPrint('Notice: cancel backup reminder for $activityId: $e');
+    }
   }
 
   @override
   Future<void> cancelAll() async {
-    await _notificationsPlugin.cancelAll();
+    try {
+      await _notificationsPlugin.cancelAll();
+    } catch (e) {
+      debugPrint('Notice: cancelAll notifications: $e');
+    }
   }
 
   @override
@@ -180,6 +208,20 @@ class LocalNotificationService implements NotificationService {
 
     const notificationDetails = NotificationDetails(android: androidDetails);
 
+    final androidPlugin = _notificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+
+    bool canExact = false;
+    try {
+      canExact = (await androidPlugin?.canScheduleExactNotifications()) ?? false;
+    } catch (e) {
+      canExact = false;
+    }
+
+    final scheduleMode = canExact
+        ? AndroidScheduleMode.exactAllowWhileIdle
+        : AndroidScheduleMode.inexactAllowWhileIdle;
+
     try {
       await _notificationsPlugin.zonedSchedule(
         id,
@@ -187,14 +229,48 @@ class LocalNotificationService implements NotificationService {
         body,
         scheduledDate,
         notificationDetails,
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        androidScheduleMode: scheduleMode,
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
+        matchDateTimeComponents: DateTimeComponents.time,
       );
     } catch (e) {
-      debugPrint('Error scheduling notification $id: $e');
+      debugPrint('Notice: Scheduling notification $id with $scheduleMode failed: $e');
+      if (scheduleMode != AndroidScheduleMode.inexactAllowWhileIdle) {
+        try {
+          await _notificationsPlugin.zonedSchedule(
+            id,
+            title,
+            body,
+            scheduledDate,
+            notificationDetails,
+            androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+            uiLocalNotificationDateInterpretation:
+                UILocalNotificationDateInterpretation.absoluteTime,
+            matchDateTimeComponents: DateTimeComponents.time,
+          );
+        } catch (fallbackError) {
+          debugPrint('Notice: Fallback inexact scheduling failed for $id: $fallbackError');
+        }
+      }
     }
   }
+
+  @visibleForTesting
+  tz.TZDateTime calculateNextScheduleTime(
+    int hour,
+    int minute, {
+    required bool isCompletedToday,
+    required bool isSkippedToday,
+    DateTime? testNow,
+  }) =>
+      _calculateNextScheduleTime(
+        hour,
+        minute,
+        isCompletedToday: isCompletedToday,
+        isSkippedToday: isSkippedToday,
+        testNow: testNow,
+      );
 
   tz.TZDateTime _calculateNextScheduleTime(
     int hour,

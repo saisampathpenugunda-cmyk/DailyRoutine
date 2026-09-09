@@ -188,5 +188,95 @@ void main() {
       controller.start();
       expect(callCount, 0);
     });
+
+    test('toJson and fromJson preserve paused timer state', () {
+      final timer = RoutineTimerController(
+        totalDuration: const Duration(minutes: 10),
+        initialRemaining: const Duration(minutes: 6, seconds: 30),
+        initialState: TimerState.paused,
+      );
+
+      final json = timer.toJson();
+      expect(json['totalDurationSeconds'], 600);
+      expect(json['remainingSeconds'], 390);
+      expect(json['state'], 'paused');
+      expect(json['endTime'], isNull);
+
+      final restored = RoutineTimerController.fromJson(json);
+      expect(restored.totalDuration, const Duration(minutes: 10));
+      expect(restored.remaining, const Duration(minutes: 6, seconds: 30));
+      expect(restored.state, TimerState.paused);
+      expect(restored.isPaused, isTrue);
+      expect(restored.formattedTime, '06:30');
+    });
+
+    test('toJson and fromJson preserve running timer state when endTime in future', () {
+      final futureEndTime = DateTime.now().add(const Duration(minutes: 4));
+      final timer = RoutineTimerController(
+        totalDuration: const Duration(minutes: 10),
+        initialRemaining: const Duration(minutes: 4),
+        initialState: TimerState.running,
+        initialEndTime: futureEndTime,
+      );
+
+      final json = timer.toJson();
+      expect(json['state'], 'running');
+      expect(json['endTime'], futureEndTime.millisecondsSinceEpoch);
+
+      final restored = RoutineTimerController.fromJson(json);
+      expect(restored.state, TimerState.running);
+      expect(restored.isRunning, isTrue);
+      expect(restored.endTime, isNotNull);
+      expect(restored.remaining.inMinutes, inInclusiveRange(3, 4));
+    });
+
+    test('fromJson auto-completes running timer when endTime is in the past', () {
+      final pastEndTime = DateTime.now().subtract(const Duration(minutes: 1));
+      final json = {
+        'totalDurationSeconds': 600,
+        'remainingSeconds': 100,
+        'state': 'running',
+        'endTime': pastEndTime.millisecondsSinceEpoch,
+      };
+
+      final restored = RoutineTimerController.fromJson(json);
+      expect(restored.state, TimerState.completed);
+      expect(restored.isCompleted, isTrue);
+      expect(restored.remaining, Duration.zero);
+    });
+
+    group('completionProgress tests', () {
+      test('completionProgress is 0.0 initially', () {
+        expect(controller.completionProgress, 0.0);
+      });
+
+      test('completionProgress returns accurate fraction when paused', () {
+        var currentTime = DateTime(2026, 9, 9, 10, 0, 0);
+        final customController = RoutineTimerController(
+          totalDuration: const Duration(minutes: 10), // 600s
+          now: () => currentTime,
+        );
+
+        customController.start();
+        // Advance 4 minutes (240s)
+        currentTime = currentTime.add(const Duration(minutes: 4));
+        customController.pause();
+
+        // 4 minutes elapsed out of 10 = 0.4
+        expect(customController.completionProgress, closeTo(0.4, 0.001));
+      });
+
+      test('completionProgress is 1.0 when completed or finished', () {
+        controller.finish();
+        expect(controller.completionProgress, 1.0);
+      });
+
+      test('completionProgress resets to 0.0 on reset()', () {
+        controller.finish();
+        expect(controller.completionProgress, 1.0);
+        controller.reset();
+        expect(controller.completionProgress, 0.0);
+      });
+    });
   });
 }

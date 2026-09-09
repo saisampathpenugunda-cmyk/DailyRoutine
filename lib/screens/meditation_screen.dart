@@ -3,15 +3,18 @@ import 'package:flutter/material.dart';
 import '../controllers/routine_timer_controller.dart';
 import '../models/activity.dart';
 import '../repositories/activity_repository.dart';
+import '../theme/app_theme.dart';
 
 class MeditationScreen extends StatefulWidget {
   final Activity activity;
   final ActivityRepository repository;
+  final RoutineTimerController? timer;
 
   const MeditationScreen({
     super.key,
     required this.activity,
     required this.repository,
+    this.timer,
   });
 
   @override
@@ -25,10 +28,21 @@ class _MeditationScreenState extends State<MeditationScreen> {
   @override
   void initState() {
     super.initState();
-    _timer = RoutineTimerController(
-      totalDuration: widget.activity.defaultDuration,
-    );
+    _timer = widget.timer ??
+        widget.repository.getTimerController(
+          widget.activity.id,
+          defaultDuration: widget.activity.defaultDuration,
+        );
     _timer.addListener(_onTimerChange);
+
+    if (_timer.isRunning) {
+      final completed = _timer.tick();
+      if (completed) {
+        _markCompleted();
+      } else {
+        _startTicker();
+      }
+    }
   }
 
   void _onTimerChange() {
@@ -88,7 +102,6 @@ class _MeditationScreenState extends State<MeditationScreen> {
   void dispose() {
     _ticker?.cancel();
     _timer.removeListener(_onTimerChange);
-    _timer.dispose();
     super.dispose();
   }
 
@@ -174,13 +187,21 @@ class _ActivityInfoCard extends StatelessWidget {
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                color: colorScheme.primaryContainer,
+                color: context.appColors.highlight,
                 borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: activity.isCompleted
+                      ? context.appColors.completed.withValues(alpha: 0.25)
+                      : context.appColors.border,
+                  width: 1,
+                ),
               ),
               child: Icon(
-                Icons.self_improvement,
+                activity.activityType.icon,
                 size: 28,
-                color: colorScheme.onPrimaryContainer,
+                color: activity.isCompleted
+                    ? context.appColors.completed
+                    : context.appColors.primary,
               ),
             ),
             const SizedBox(width: 16),
@@ -246,7 +267,7 @@ class _TimerDisplay extends StatelessWidget {
                   strokeWidth: 10,
                   backgroundColor: colorScheme.surfaceContainerHighest,
                   valueColor: AlwaysStoppedAnimation<Color>(
-                    isCompleted ? Colors.green : colorScheme.primary,
+                    isCompleted ? context.appColors.completed : colorScheme.primary,
                   ),
                 ),
               ),
@@ -254,7 +275,7 @@ class _TimerDisplay extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   if (isCompleted)
-                    Icon(Icons.check_circle, size: 48, color: Colors.green)
+                    Icon(Icons.check_circle, size: 48, color: context.appColors.completed)
                   else
                     Text(
                       timer.formattedTime,
@@ -268,7 +289,7 @@ class _TimerDisplay extends StatelessWidget {
                   Text(
                     isCompleted ? 'Completed!' : _stateLabel(timer.state),
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: isCompleted ? Colors.green : colorScheme.outline,
+                      color: isCompleted ? context.appColors.completed : colorScheme.outline,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -358,7 +379,8 @@ class _Controls extends StatelessWidget {
                 icon: const Icon(Icons.check_rounded),
                 label: const Text('Finish'),
                 style: FilledButton.styleFrom(
-                  backgroundColor: Colors.green,
+                  backgroundColor: context.appColors.completed,
+                  foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
@@ -395,8 +417,8 @@ class _Controls extends StatelessWidget {
                 icon: const Icon(Icons.check_rounded),
                 label: const Text('Finish'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.green,
-                  side: const BorderSide(color: Colors.green),
+                  foregroundColor: context.appColors.completed,
+                  side: BorderSide(color: context.appColors.completed),
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(14),
@@ -416,19 +438,19 @@ class _Controls extends StatelessWidget {
               width: double.infinity,
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.green.withValues(alpha: 0.1),
+                color: context.appColors.completed.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.green.withValues(alpha: 0.4)),
+                border: Border.all(color: context.appColors.completed.withValues(alpha: 0.4)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.emoji_events, color: Colors.green, size: 22),
+                  Icon(Icons.emoji_events, color: context.appColors.completed, size: 22),
                   const SizedBox(width: 8),
                   Text(
                     'Meditation completed for today!',
                     style: theme.textTheme.titleSmall?.copyWith(
-                      color: Colors.green,
+                      color: context.appColors.completed,
                       fontWeight: FontWeight.bold,
                     ),
                   ),

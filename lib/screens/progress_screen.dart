@@ -24,6 +24,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
     final history = widget.repository.getHistory();
     final todayActivities = widget.repository.getActivities();
 
@@ -46,35 +47,35 @@ class _ProgressScreenState extends State<ProgressScreen> {
             });
           },
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
 
         // ── Date Range Label ────────────────────────────────────────────────
         Text(
           _getDateRangeLabel(stats),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: AppTheme.slate500,
+            color: colors.textSecondary,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
 
         // ── 2. Completion Statistics Card ───────────────────────────────────
         _CompletionStatsCard(stats: stats),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
 
         // ── 3. Visual Graph Card ────────────────────────────────────────────
         _ChartCard(stats: stats),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
 
         // ── 4. Workout Statistics Card ──────────────────────────────────────
         _WorkoutStatsCard(stats: stats),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
 
         // ── 5. Monthly Final Accuracy (Month View Only) ─────────────────────
         if (_selectedPeriod == ProgressPeriod.month && stats.monthlyAccuracy != null) ...[
           _MonthlyAccuracyCard(stats: stats),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
         ],
       ],
     );
@@ -116,12 +117,14 @@ class _PeriodSelector extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+
     return Container(
       decoration: BoxDecoration(
-        color: AppTheme.slate100,
+        color: colors.barBackground,
         borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
         border: Border.all(
-          color: AppTheme.slate200,
+          color: colors.border,
           width: AppTheme.borderWidth,
         ),
       ),
@@ -137,10 +140,10 @@ class _PeriodSelector extends StatelessWidget {
                 duration: const Duration(milliseconds: 150),
                 padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
-                  color: isSelected ? Colors.white : Colors.transparent,
+                  color: isSelected ? colors.card : Colors.transparent,
                   borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
                   border: isSelected
-                      ? Border.all(color: AppTheme.slate300, width: 1)
+                      ? Border.all(color: colors.border, width: 1)
                       : null,
                   boxShadow: isSelected
                       ? [
@@ -158,7 +161,7 @@ class _PeriodSelector extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
-                    color: isSelected ? AppTheme.cobaltBlue : AppTheme.slate600,
+                    color: isSelected ? colors.primary : colors.textSecondary,
                   ),
                 ),
               ),
@@ -177,25 +180,28 @@ class _CompletionStatsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final percent = stats.completionPercentage.toInt();
     final progress = stats.totalActivities > 0
         ? stats.completedCount / stats.totalActivities
         : 0.0;
     final progressColor = percent == 100
-        ? AppTheme.emeraldGreen
+        ? colors.completed
         : percent > 0
-            ? AppTheme.cobaltBlue
-            : AppTheme.slate400;
+            ? colors.primary
+            : colors.secondary;
 
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+        color: colors.card,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
         border: Border.all(
-          color: AppTheme.slate200,
+          color: colors.border,
           width: AppTheme.borderWidth,
         ),
+        boxShadow: isDark ? null : AppTheme.lightCardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -203,28 +209,28 @@ class _CompletionStatsCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'Completion Rate',
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
-                  color: AppTheme.slate900,
+                  color: colors.textMain,
                 ),
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                 decoration: BoxDecoration(
-                  color: progressColor.withValues(alpha: 0.1),
+                  color: progressColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
                   border: Border.all(
-                    color: progressColor.withValues(alpha: 0.3),
+                    color: progressColor.withValues(alpha: 0.35),
                     width: 1,
                   ),
                 ),
                 child: Text(
                   '$percent%',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: 13,
                     fontWeight: FontWeight.w700,
                     color: progressColor,
                   ),
@@ -237,19 +243,20 @@ class _CompletionStatsCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
             child: LinearProgressIndicator(
               value: progress,
-              minHeight: 8,
-              backgroundColor: AppTheme.slate100,
+              minHeight: 7,
+              backgroundColor: colors.barBackground,
               valueColor: AlwaysStoppedAnimation<Color>(progressColor),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           Row(
             children: [
               Expanded(
                 child: _StatPill(
                   label: 'Completed',
                   value: '${stats.completedCount}',
-                  color: AppTheme.emeraldGreen,
+                  color: colors.completed,
+                  bgColor: colors.highlight,
                 ),
               ),
               const SizedBox(width: 8),
@@ -257,7 +264,8 @@ class _CompletionStatsCard extends StatelessWidget {
                 child: _StatPill(
                   label: 'Skipped',
                   value: '${stats.skippedCount}',
-                  color: AppTheme.amberWarning,
+                  color: colors.skipped,
+                  bgColor: isDark ? colors.card : const Color(0xFFEDF4F7),
                 ),
               ),
               const SizedBox(width: 8),
@@ -265,7 +273,8 @@ class _CompletionStatsCard extends StatelessWidget {
                 child: _StatPill(
                   label: 'Missed',
                   value: '${stats.missedCount}',
-                  color: AppTheme.slate500,
+                  color: colors.missed,
+                  bgColor: isDark ? colors.card : const Color(0xFFFDF0ED),
                 ),
               ),
             ],
@@ -280,11 +289,13 @@ class _StatPill extends StatelessWidget {
   final String label;
   final String value;
   final Color color;
+  final Color? bgColor;
 
   const _StatPill({
     required this.label,
     required this.value,
     required this.color,
+    this.bgColor,
   });
 
   @override
@@ -292,8 +303,8 @@ class _StatPill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+        color: bgColor ?? color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
         border: Border.all(
           color: color.withValues(alpha: 0.25),
           width: 1,
@@ -305,7 +316,7 @@ class _StatPill extends StatelessWidget {
             value,
             style: TextStyle(
               fontSize: 18,
-              fontWeight: FontWeight.w700,
+              fontWeight: FontWeight.w800,
               color: color,
             ),
           ),
@@ -331,6 +342,7 @@ class _ChartCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
     String title = 'Activity Distribution';
     Widget chartWidget;
 
@@ -349,28 +361,31 @@ class _ChartCard extends StatelessWidget {
       chartWidget = MonthDayProgressBarChart(points: stats.dailyPoints);
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+        color: colors.card,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
         border: Border.all(
-          color: AppTheme.slate200,
+          color: colors.border,
           width: AppTheme.borderWidth,
         ),
+        boxShadow: isDark ? null : AppTheme.lightCardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: AppTheme.slate900,
+              color: colors.textMain,
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 14),
           chartWidget,
         ],
       ),
@@ -385,49 +400,53 @@ class _WorkoutStatsCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+        color: colors.card,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
         border: Border.all(
-          color: AppTheme.slate200,
+          color: colors.border,
           width: AppTheme.borderWidth,
         ),
+        boxShadow: isDark ? null : AppTheme.lightCardShadow,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             'Workout Metrics',
             style: TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
-              color: AppTheme.slate900,
+              color: colors.textMain,
             ),
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           _MetricRow(
             icon: Icons.timer_outlined,
-            iconColor: AppTheme.cobaltBlue,
+            iconColor: colors.primary,
             label: 'Total Workout Duration',
             value: stats.formattedDuration,
           ),
-          const SizedBox(height: 10),
-          const Divider(color: AppTheme.slate200, height: 1),
-          const SizedBox(height: 10),
+          const SizedBox(height: 9),
+          Divider(color: colors.border, height: 1),
+          const SizedBox(height: 9),
           _MetricRow(
             icon: Icons.fitness_center_outlined,
-            iconColor: AppTheme.emeraldGreen,
+            iconColor: colors.completed,
             label: 'Dumbbell Sets Completed',
             value: '${stats.dumbbellSetsCount} sets',
           ),
-          const SizedBox(height: 10),
-          const Divider(color: AppTheme.slate200, height: 1),
-          const SizedBox(height: 10),
+          const SizedBox(height: 9),
+          Divider(color: colors.border, height: 1),
+          const SizedBox(height: 9),
           _MetricRow(
             icon: Icons.repeat_outlined,
-            iconColor: AppTheme.amberWarning,
+            iconColor: colors.skipped,
             label: 'Dumbbell Reps Completed',
             value: '${stats.dumbbellRepsCount} reps',
           ),
@@ -452,33 +471,35 @@ class _MetricRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+
     return Row(
       children: [
         Container(
-          padding: const EdgeInsets.all(8),
+          padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.1),
+            color: iconColor.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
           ),
-          child: Icon(icon, size: 18, color: iconColor),
+          child: Icon(icon, size: 17, color: iconColor),
         ),
         const SizedBox(width: 12),
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(
-              fontSize: 14,
+            style: TextStyle(
+              fontSize: 13,
               fontWeight: FontWeight.w500,
-              color: AppTheme.slate700,
+              color: colors.textSecondary,
             ),
           ),
         ),
         Text(
           value,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w700,
-            color: AppTheme.slate900,
+            color: colors.textMain,
           ),
         ),
       ],
@@ -493,33 +514,37 @@ class _MonthlyAccuracyCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
     final accuracy = stats.monthlyAccuracy?.toInt() ?? 0;
     final color = accuracy >= 80
-        ? AppTheme.emeraldGreen
+        ? colors.completed
         : accuracy >= 50
-            ? AppTheme.cobaltBlue
-            : AppTheme.amberWarning;
+            ? colors.primary
+            : colors.skipped;
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
       padding: const EdgeInsets.all(16.0),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+        color: colors.card,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
         border: Border.all(
-          color: color.withValues(alpha: 0.4),
+          color: color.withValues(alpha: 0.35),
           width: AppTheme.borderWidth,
         ),
+        boxShadow: isDark ? null : AppTheme.lightCardShadow,
       ),
       child: Row(
         children: [
           Container(
-            width: 48,
-            height: 48,
+            width: 46,
+            height: 46,
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+              color: color.withValues(alpha: 0.12),
+              shape: BoxShape.circle,
             ),
-            child: Icon(Icons.verified_outlined, color: color, size: 28),
+            child: Icon(Icons.verified_outlined, color: color, size: 24),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -529,12 +554,12 @@ class _MonthlyAccuracyCard extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
+                    Text(
                       'Monthly Accuracy',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
-                        color: AppTheme.slate900,
+                        color: colors.textMain,
                       ),
                     ),
                     Text(
@@ -550,9 +575,10 @@ class _MonthlyAccuracyCard extends StatelessWidget {
                 const SizedBox(height: 4),
                 Text(
                   'Based on ${stats.recordedDaysCount} recorded day${stats.recordedDaysCount == 1 ? '' : 's'} (${stats.completedCount} of ${stats.totalActivities} activities done)',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 12,
-                    color: AppTheme.slate500,
+                    fontWeight: FontWeight.w400,
+                    color: colors.textSecondary,
                   ),
                 ),
               ],

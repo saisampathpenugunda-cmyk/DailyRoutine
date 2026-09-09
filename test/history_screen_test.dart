@@ -11,7 +11,7 @@ void main() {
     testWidgets('Displays empty history placeholder when no history exists', (
       WidgetTester tester,
     ) async {
-      final repo = InMemoryActivityRepository();
+      final repo = InMemoryActivityRepository(autoCreateTodayHistory: false);
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -33,6 +33,7 @@ void main() {
       WidgetTester tester,
     ) async {
       final repo = InMemoryActivityRepository(
+        autoCreateTodayHistory: false,
         initialHistory: [
           DayHistory(
             dateKey: '2026-09-06',
@@ -95,11 +96,11 @@ void main() {
       await tester.tap(find.text('History'));
       await tester.pumpAndSettle();
 
-      // Now on History screen
-      expect(find.text('No History Recorded Yet'), findsOneWidget);
+      // Today's record is immediately present in History with 0/3 DONE
+      expect(find.text('0/3 DONE'), findsOneWidget);
 
       // Tap back to Today tab
-      await tester.tap(find.text('Today'));
+      await tester.tap(find.descendant(of: find.byType(BottomNavigationBar), matching: find.text('Today')));
       await tester.pumpAndSettle();
 
       // Back on Today screen

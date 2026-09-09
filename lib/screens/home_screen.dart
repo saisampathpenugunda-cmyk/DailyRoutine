@@ -26,7 +26,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late List<Activity> _activities;
   int _currentTabIndex = 0;
   Key _historyKey = UniqueKey();
@@ -35,7 +35,34 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _loadActivities();
+    WidgetsBinding.instance.addObserver(this);
+    _activities = widget.repository.getActivities();
+    _checkRolloverAndRefresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) async {
+    if (state == AppLifecycleState.resumed) {
+      await _checkRolloverAndRefresh();
+    }
+  }
+
+  Future<void> _checkRolloverAndRefresh() async {
+    final rolledOver = await widget.repository.checkDateRollover();
+    if (!mounted) return;
+    setState(() {
+      if (rolledOver) {
+        _historyKey = UniqueKey();
+        _progressKey = UniqueKey();
+      }
+      _activities = widget.repository.getActivities();
+    });
   }
 
   void _loadActivities() {
@@ -44,18 +71,21 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _onTabSelected(int index) {
+  Future<void> _onTabSelected(int index) async {
+    final rolledOver = await widget.repository.checkDateRollover();
+    if (!mounted) return;
     setState(() {
       _currentTabIndex = index;
-      if (index == 1) {
+      if (index == 1 || rolledOver) {
         _historyKey = UniqueKey();
-      } else if (index == 2) {
+      }
+      if (index == 2 || rolledOver) {
         _progressKey = UniqueKey();
       }
+      if (index == 0 || rolledOver) {
+        _activities = widget.repository.getActivities();
+      }
     });
-    if (index == 0) {
-      _loadActivities();
-    }
   }
 
   void _toggleActivityCompletion(String id) {
@@ -98,15 +128,20 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       );
     }
-    // Reload so the Home screen reflects any completion changes made downstream.
-    _loadActivities();
+    // Reload so the Home screen reflects any completion changes made downstream or date rollover.
+    await _checkRolloverAndRefresh();
   }
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final themeController = ThemeScope.of(context);
+    final isDark = themeController.isDarkMode;
+
     final completedCount = _activities.where((a) => a.isCompleted).length;
     final totalCount = _activities.length;
     final progress = totalCount > 0 ? completedCount / totalCount : 0.0;
+    final isAllDone = progress == 1.0 && totalCount > 0;
 
     return Scaffold(
       appBar: AppBar(
@@ -116,136 +151,213 @@ class _HomeScreenState extends State<HomeScreen> {
               : _currentTabIndex == 1
                   ? 'History'
                   : 'Progress',
-          style: const TextStyle(fontWeight: FontWeight.w700),
+          style: TextStyle(
+            color: colors.textMain,
+            fontWeight: FontWeight.w700,
+          ),
         ),
         elevation: 0,
         centerTitle: false,
-        actions: _currentTabIndex == 0
-            ? [
-                IconButton(
-                  icon: const Icon(Icons.notifications_outlined),
-                  tooltip: 'Reminders',
-                  onPressed: () async {
-                    await Navigator.of(context).push(
-                      MaterialPageRoute<void>(
-                        builder: (context) => ReminderSettingsScreen(
-                          repository: widget.repository,
-                          notificationService: widget.notificationService,
-                        ),
-                      ),
-                    );
-                    _loadActivities();
-                  },
-                ),
-              ]
-            : null,
+        actions: [
+          // ── Theme Mode Toggle ─────────────────────────────────────────────
+          IconButton(
+            key: const Key('theme_mode_toggle_button'),
+            icon: Icon(
+              isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+              color: colors.textMain,
+            ),
+            tooltip: isDark ? 'Switch to Urban Zen (Light)' : 'Switch to Cyber Noir (Dark)',
+            onPressed: () {
+              themeController.toggleTheme();
+            },
+          ),
+          if (_currentTabIndex == 0)
+            IconButton(
+              icon: Icon(
+                Icons.notifications_outlined,
+                color: colors.textMain,
+              ),
+              tooltip: 'Reminders',
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (context) => ReminderSettingsScreen(
+                      repository: widget.repository,
+                      notificationService: widget.notificationService,
+                    ),
+                  ),
+                );
+                _loadActivities();
+              },
+            ),
+        ],
       ),
       body: _currentTabIndex == 0
           ? ListView(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              padding: const EdgeInsets.symmetric(vertical: 4.0),
               children: [
+                // ── Greeting Header (matching reference image) ─────────────────
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  padding: const EdgeInsets.fromLTRB(20.0, 4.0, 20.0, 4.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Good Morning,',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: colors.textMain,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        _getFormattedDate(),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // ── Today's Plan Hero Card with Circular Completion Ring ───────
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
                   child: Container(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                      color: colors.card,
+                      borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
                       border: Border.all(
-                        color: AppTheme.slate200,
+                        color: isAllDone
+                            ? colors.completed.withValues(alpha: 0.35)
+                            : colors.border,
                         width: AppTheme.borderWidth,
                       ),
+                      boxShadow: isDark ? null : AppTheme.lightCardShadow,
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(8),
-                              decoration: BoxDecoration(
-                                color: AppTheme.cobaltBlue.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
-                              ),
-                              child: const Icon(
-                                Icons.calendar_today,
-                                color: AppTheme.cobaltBlue,
-                                size: 20,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    "Today's Plan",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 16,
-                                      color: AppTheme.slate900,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    '$completedCount of $totalCount activities completed',
-                                    style: const TextStyle(
-                                      fontSize: 13,
-                                      color: AppTheme.slate500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: (progress == 1.0 ? AppTheme.emeraldGreen : AppTheme.cobaltBlue)
-                                    .withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
-                                border: Border.all(
-                                  color: (progress == 1.0 ? AppTheme.emeraldGreen : AppTheme.cobaltBlue)
-                                      .withValues(alpha: 0.3),
-                                  width: 1,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Today's Plan",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 16,
+                                  color: colors.textMain,
+                                  letterSpacing: -0.2,
                                 ),
                               ),
-                              child: Text(
-                                '${(progress * 100).toInt()}%',
+                              const SizedBox(height: 3),
+                              Text(
+                                '$completedCount of $totalCount activities completed',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: progress == 1.0 ? AppTheme.emeraldGreen : AppTheme.cobaltBlue,
+                                  fontWeight: FontWeight.w500,
+                                  color: colors.textSecondary,
                                 ),
                               ),
-                            ),
-                          ],
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                                decoration: BoxDecoration(
+                                  color: (isAllDone ? colors.completed : colors.primary)
+                                      .withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+                                  border: Border.all(
+                                    color: (isAllDone ? colors.completed : colors.primary)
+                                        .withValues(alpha: 0.3),
+                                    width: 1,
+                                  ),
+                                ),
+                                child: Text(
+                                  isAllDone ? '100% Done' : '${(progress * 100).toInt()}% Done',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: isAllDone ? colors.completed : colors.primary,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        const SizedBox(height: 12),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
-                          child: LinearProgressIndicator(
-                            value: progress,
-                            minHeight: 6,
-                            backgroundColor: AppTheme.slate100,
-                            valueColor: AlwaysStoppedAnimation<Color>(
-                              progress == 1.0 ? AppTheme.emeraldGreen : AppTheme.cobaltBlue,
-                            ),
+                        const SizedBox(width: 14),
+                        // Circular progress ring matching reference with safe text containment
+                        SizedBox(
+                          width: 66,
+                          height: 66,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              SizedBox.expand(
+                                child: CircularProgressIndicator(
+                                  value: progress,
+                                  strokeWidth: 5.0,
+                                  backgroundColor: colors.barBackground,
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    isAllDone ? colors.completed : colors.primary,
+                                  ),
+                                ),
+                              ),
+                              Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(8.0),
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      crossAxisAlignment: CrossAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          '${(progress * 100).toInt()}%',
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            fontWeight: FontWeight.w800,
+                                            color: colors.textMain,
+                                            letterSpacing: -0.3,
+                                            height: 1.1,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 1.5),
+                                        Text(
+                                          'Complete',
+                                          style: TextStyle(
+                                            fontSize: 8.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: colors.textSecondary,
+                                            letterSpacing: 0.1,
+                                            height: 1.1,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 8),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20.0, 10.0, 20.0, 4.0),
                   child: Text(
-                    'ACTIVITIES',
+                    'Your Activities',
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: AppTheme.slate500,
-                      letterSpacing: 0.8,
+                      color: colors.textMain,
+                      letterSpacing: -0.2,
                     ),
                   ),
                 ),
@@ -253,6 +365,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   (activity) => ActivityCard(
                     key: ValueKey(activity.id),
                     activity: activity,
+                    progress: widget.repository.getActivityProgress(activity),
                     onTap: () => _navigateToDetail(activity),
                     onToggleCompletion: (_) => _toggleActivityCompletion(activity.id),
                   ),
@@ -269,20 +382,29 @@ class _HomeScreenState extends State<HomeScreen> {
                   repository: widget.repository,
                 ),
       bottomNavigationBar: Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
+        decoration: BoxDecoration(
+          color: colors.surface,
           border: Border(
-            top: BorderSide(color: AppTheme.slate200, width: AppTheme.borderWidth),
+            top: BorderSide(color: colors.border, width: AppTheme.borderWidth),
           ),
+          boxShadow: isDark
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.03),
+                    blurRadius: 8,
+                    offset: const Offset(0, -2),
+                  ),
+                ],
         ),
         child: BottomNavigationBar(
           currentIndex: _currentTabIndex,
           onTap: _onTabSelected,
-          backgroundColor: Colors.white,
+          backgroundColor: colors.surface,
           elevation: 0,
-          selectedItemColor: AppTheme.cobaltBlue,
-          unselectedItemColor: AppTheme.slate400,
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+          selectedItemColor: colors.primary,
+          unselectedItemColor: colors.secondary,
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
           unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
           items: const [
             BottomNavigationBarItem(
@@ -304,5 +426,12 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     );
+  }
+
+  String _getFormattedDate() {
+    final now = DateTime.now();
+    const weekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return '${weekDays[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}, ${now.year}';
   }
 }

@@ -17,15 +17,16 @@ class DayActivityBreakdownBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
     final total = completedCount + skippedCount + missedCount;
 
     if (total == 0) {
       return Container(
         height: 16,
         decoration: BoxDecoration(
-          color: AppTheme.slate100,
+          color: colors.barBackground,
           borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
-          border: Border.all(color: AppTheme.slate200, width: 1),
+          border: Border.all(color: colors.border, width: 1),
         ),
       );
     }
@@ -42,17 +43,17 @@ class DayActivityBreakdownBar extends StatelessWidget {
                 if (completedCount > 0)
                   Expanded(
                     flex: completedCount,
-                    child: Container(color: AppTheme.emeraldGreen),
+                    child: Container(color: colors.completed),
                   ),
                 if (skippedCount > 0)
                   Expanded(
                     flex: skippedCount,
-                    child: Container(color: AppTheme.amberWarning),
+                    child: Container(color: colors.skipped),
                   ),
                 if (missedCount > 0)
                   Expanded(
                     flex: missedCount,
-                    child: Container(color: AppTheme.slate300),
+                    child: Container(color: colors.secondary.withValues(alpha: 0.3)),
                   ),
               ],
             ),
@@ -63,15 +64,15 @@ class DayActivityBreakdownBar extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             _LegendItem(
-              color: AppTheme.emeraldGreen,
+              color: colors.completed,
               label: 'Done ($completedCount)',
             ),
             _LegendItem(
-              color: AppTheme.amberWarning,
+              color: colors.skipped,
               label: 'Skipped ($skippedCount)',
             ),
             _LegendItem(
-              color: AppTheme.slate400,
+              color: colors.secondary,
               label: 'Missed/Pending ($missedCount)',
             ),
           ],
@@ -89,6 +90,8 @@ class _LegendItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -103,10 +106,10 @@ class _LegendItem extends StatelessWidget {
         const SizedBox(width: 6),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 12,
             fontWeight: FontWeight.w600,
-            color: AppTheme.slate700,
+            color: colors.textSecondary,
           ),
         ),
       ],
@@ -122,6 +125,8 @@ class WeekProgressBarChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       crossAxisAlignment: CrossAxisAlignment.end,
@@ -130,10 +135,10 @@ class WeekProgressBarChart extends StatelessWidget {
         final hasRecord = point.isRecorded;
         final barHeight = hasRecord ? (rate * 80).clamp(4.0, 80.0) : 0.0;
         final barColor = rate >= 1.0
-            ? AppTheme.emeraldGreen
+            ? colors.completed
             : rate > 0
-                ? AppTheme.cobaltBlue
-                : AppTheme.slate300;
+                ? colors.primary
+                : colors.secondary.withValues(alpha: 0.3);
 
         return Column(
           mainAxisSize: MainAxisSize.min,
@@ -143,7 +148,7 @@ class WeekProgressBarChart extends StatelessWidget {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
-                color: hasRecord && rate > 0 ? AppTheme.slate900 : AppTheme.slate400,
+                color: hasRecord && rate > 0 ? colors.textMain : colors.textSecondary,
               ),
             ),
             const SizedBox(height: 6),
@@ -151,10 +156,10 @@ class WeekProgressBarChart extends StatelessWidget {
               width: 28,
               height: 80,
               decoration: BoxDecoration(
-                color: AppTheme.slate100,
+                color: colors.barBackground,
                 borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
                 border: Border.all(
-                  color: AppTheme.slate200,
+                  color: colors.border,
                   width: AppTheme.borderWidth,
                 ),
               ),
@@ -173,17 +178,18 @@ class WeekProgressBarChart extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               point.shortLabel,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
-                color: AppTheme.slate700,
+                color: colors.textMain,
               ),
             ),
             Text(
               '${point.date.day}',
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 10,
-                color: AppTheme.slate400,
+                fontWeight: FontWeight.w500,
+                color: colors.textSecondary,
               ),
             ),
           ],
@@ -201,11 +207,13 @@ class MonthDayProgressBarChart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = context.appColors;
+
     if (points.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'No data for this month',
-          style: TextStyle(fontSize: 13, color: AppTheme.slate400),
+          style: TextStyle(fontSize: 13, color: colors.textSecondary),
         ),
       );
     }
@@ -219,10 +227,10 @@ class MonthDayProgressBarChart extends StatelessWidget {
           final hasRecord = point.isRecorded;
           final barHeight = hasRecord ? (rate * 64).clamp(4.0, 64.0) : 0.0;
           final barColor = rate >= 1.0
-              ? AppTheme.emeraldGreen
+              ? colors.completed
               : rate > 0
-                  ? AppTheme.cobaltBlue
-                  : AppTheme.slate300;
+                  ? colors.primary
+                  : colors.secondary.withValues(alpha: 0.3);
 
           return Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4.0),
@@ -234,7 +242,7 @@ class MonthDayProgressBarChart extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 9,
                     fontWeight: FontWeight.w700,
-                    color: hasRecord && rate > 0 ? AppTheme.slate900 : AppTheme.slate400,
+                    color: hasRecord && rate > 0 ? colors.textMain : colors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -242,10 +250,10 @@ class MonthDayProgressBarChart extends StatelessWidget {
                   width: 22,
                   height: 64,
                   decoration: BoxDecoration(
-                    color: AppTheme.slate100,
+                    color: colors.barBackground,
                     borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
                     border: Border.all(
-                      color: AppTheme.slate200,
+                      color: colors.border,
                       width: 1,
                     ),
                   ),
@@ -264,10 +272,10 @@ class MonthDayProgressBarChart extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text(
                   point.shortLabel,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 10,
                     fontWeight: FontWeight.w600,
-                    color: AppTheme.slate700,
+                    color: colors.textMain,
                   ),
                 ),
               ],

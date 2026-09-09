@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 
 enum ActivityType {
   meditation,
@@ -25,6 +26,25 @@ enum ActivityType {
         return 'Reading';
       case ActivityType.general:
         return 'General';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case ActivityType.meditation:
+        return Icons.self_improvement;
+      case ActivityType.walking:
+        return Icons.directions_walk;
+      case ActivityType.dumbbells:
+        return Icons.fitness_center;
+      case ActivityType.study:
+        return Icons.school;
+      case ActivityType.guitar:
+        return Icons.music_note;
+      case ActivityType.reading:
+        return Icons.menu_book;
+      case ActivityType.general:
+        return Icons.star_outline;
     }
   }
 }
