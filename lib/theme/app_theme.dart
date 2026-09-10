@@ -160,6 +160,19 @@ class AppTheme {
   static const Color cyberNoirBorder = Color(0xFF2B363C);       // Card/container border
   static const Color cyberNoirBarBg = Color(0xFF1A2226);        // Track background
 
+  // ── Switch Styling Constants (Polished Outlined Switch) ──────────────────
+  // Light theme:
+  static const Color lightSwitchTrackOutlineOn = Color(0xFF7E69AB);  // Strong primary purple outline (2.0px)
+  static const Color lightSwitchThumbOn = Color(0xFF7E69AB);         // Prominent purple thumb (24px diameter)
+  static const Color lightSwitchTrackOutlineOff = Color(0xFFB5A8C8); // Clearly visible muted purple outline (1.4px)
+  static const Color lightSwitchThumbOff = Color(0xFFA699BC);        // Muted purple/grey circular thumb (16px diameter)
+
+  // Dark theme (Cyber Noir):
+  static const Color cyberNoirSwitchTrackOutlineOn = Color(0xFF8BCFD1);  // Electric cyan outline (2.0px)
+  static const Color cyberNoirSwitchThumbOn = Color(0xFF8BCFD1);         // Vibrant cyan thumb (24px diameter)
+  static const Color cyberNoirSwitchTrackOutlineOff = Color(0xFF556873); // Muted slate outline visible on dark card (1.4px)
+  static const Color cyberNoirSwitchThumbOff = Color(0xFF6F818B);        // Muted slate thumb (16px diameter)
+
   // ── Semantic Color Objects ───────────────────────────────────────────────
   static const AppThemeColors lightAppColors = AppThemeColors(
     primary: lightPrimary,
@@ -289,12 +302,17 @@ class AppTheme {
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return Colors.white;
-          return lightSecondary;
+          if (states.contains(WidgetState.selected)) return lightSwitchThumbOn;
+          return lightSwitchThumbOff;
         }),
-        trackColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return lightPrimary;
-          return lightBarBg;
+        trackColor: const WidgetStatePropertyAll(Colors.transparent),
+        trackOutlineColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return lightSwitchTrackOutlineOn;
+          return lightSwitchTrackOutlineOff;
+        }),
+        trackOutlineWidth: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return 2.0;
+          return 1.4;
         }),
       ),
       dividerTheme: const DividerThemeData(
@@ -382,12 +400,17 @@ class AppTheme {
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return cyberNoirBackground;
-          return cyberNoirSecondary;
+          if (states.contains(WidgetState.selected)) return cyberNoirSwitchThumbOn;
+          return cyberNoirSwitchThumbOff;
         }),
-        trackColor: WidgetStateProperty.resolveWith((states) {
-          if (states.contains(WidgetState.selected)) return cyberNoirPrimary;
-          return cyberNoirCard;
+        trackColor: const WidgetStatePropertyAll(Colors.transparent),
+        trackOutlineColor: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return cyberNoirSwitchTrackOutlineOn;
+          return cyberNoirSwitchTrackOutlineOff;
+        }),
+        trackOutlineWidth: WidgetStateProperty.resolveWith((states) {
+          if (states.contains(WidgetState.selected)) return 2.0;
+          return 1.4;
         }),
       ),
       dividerTheme: const DividerThemeData(

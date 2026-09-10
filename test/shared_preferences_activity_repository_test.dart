@@ -273,7 +273,8 @@ void main() {
     });
 
     test('Day 2 completion isolation: completing activity on Day 2 leaves Day 1 history unchanged', () async {
-      final repo = await SharedPreferencesActivityRepository.init();
+      var currentTime = DateTime(2026, 9, 8, 10, 0);
+      final repo = await SharedPreferencesActivityRepository.init(clock: () => currentTime);
       final day2 = DateTime(2026, 9, 9, 10, 0);
 
       // Setup Day 1
@@ -284,7 +285,8 @@ void main() {
       await repo.flush();
 
       // Rollover to Day 2
-      final rolledOver = await repo.checkDateRollover(now: day2);
+      currentTime = day2;
+      final rolledOver = await repo.checkDateRollover(now: currentTime);
       expect(rolledOver, isTrue);
       await repo.flush();
 
@@ -317,7 +319,8 @@ void main() {
     });
 
     test('Repeated checkDateRollover calls on the same day are idempotent and do not duplicate history', () async {
-      final repo = await SharedPreferencesActivityRepository.init();
+      var currentTime = DateTime(2026, 9, 8, 10, 0);
+      final repo = await SharedPreferencesActivityRepository.init(clock: () => currentTime);
       final day2 = DateTime(2026, 9, 9, 10, 0);
 
       final prefs = await SharedPreferences.getInstance();
@@ -326,15 +329,16 @@ void main() {
       await repo.flush();
 
       // First check: triggers rollover
-      final firstCheck = await repo.checkDateRollover(now: day2);
+      currentTime = day2;
+      final firstCheck = await repo.checkDateRollover(now: currentTime);
       expect(firstCheck, isTrue);
 
       // Second check on same Day 2: should be false, no extra history entry
-      final secondCheck = await repo.checkDateRollover(now: day2);
+      final secondCheck = await repo.checkDateRollover(now: currentTime);
       expect(secondCheck, isFalse);
 
       // Third check on same Day 2: should be false
-      final thirdCheck = await repo.checkDateRollover(now: day2.add(const Duration(hours: 3)));
+      final thirdCheck = await repo.checkDateRollover(now: currentTime.add(const Duration(hours: 3)));
       expect(thirdCheck, isFalse);
 
       // Contains Day 2 (today at 0%) and Day 1 (yesterday)
@@ -434,7 +438,7 @@ void main() {
 
     test('Initial 0% DayHistory creation never overwrites live Activity state', () async {
       final today = DateTime(2026, 9, 9, 10, 0);
-      final repo = await SharedPreferencesActivityRepository.init();
+      final repo = await SharedPreferencesActivityRepository.init(now: today);
       repo.setActivityCompletion('walking', isCompleted: true);
       await repo.flush();
 

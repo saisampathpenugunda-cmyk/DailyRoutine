@@ -8,7 +8,9 @@ enum ActivityType {
   study,
   guitar,
   reading,
-  general;
+  general,
+  timer,
+  workout;
 
   String get displayName {
     switch (this) {
@@ -26,6 +28,10 @@ enum ActivityType {
         return 'Reading';
       case ActivityType.general:
         return 'General';
+      case ActivityType.timer:
+        return 'Timer';
+      case ActivityType.workout:
+        return 'Workout';
     }
   }
 
@@ -45,6 +51,36 @@ enum ActivityType {
         return Icons.menu_book;
       case ActivityType.general:
         return Icons.star_outline;
+      case ActivityType.timer:
+        return Icons.timer_outlined;
+      case ActivityType.workout:
+        return Icons.fitness_center;
+    }
+  }
+}
+
+enum ActivityRecordStatus {
+  completed,
+  partial,
+  skipped,
+  missed,
+  pending,
+  disabled;
+
+  String get displayName {
+    switch (this) {
+      case ActivityRecordStatus.completed:
+        return 'Completed';
+      case ActivityRecordStatus.partial:
+        return 'Partial';
+      case ActivityRecordStatus.skipped:
+        return 'Skipped';
+      case ActivityRecordStatus.missed:
+        return 'Missed';
+      case ActivityRecordStatus.pending:
+        return 'Pending';
+      case ActivityRecordStatus.disabled:
+        return 'Disabled';
     }
   }
 }
@@ -54,6 +90,8 @@ class Activity {
   final String name;
   final ActivityType activityType;
   final Duration defaultDuration;
+  final Duration actualDuration;
+  final bool isEnabled;
   final bool isCompleted;
   final bool isSkipped;
   final List<int> completedSetsReps;
@@ -63,6 +101,8 @@ class Activity {
     required this.name,
     required this.activityType,
     required this.defaultDuration,
+    this.actualDuration = Duration.zero,
+    this.isEnabled = true,
     this.isCompleted = false,
     this.isSkipped = false,
     this.completedSetsReps = const [],
@@ -81,11 +121,40 @@ class Activity {
     return '$minutes min $remSeconds sec';
   }
 
+  String get formattedActualDuration {
+    if (actualDuration == Duration.zero) return '0 min';
+    final minutes = actualDuration.inMinutes;
+    final seconds = actualDuration.inSeconds % 60;
+    if (minutes > 0 && seconds == 0) {
+      return '$minutes min';
+    }
+    if (minutes == 0) {
+      return '$seconds sec';
+    }
+    return '$minutes min $seconds sec';
+  }
+
+  ActivityRecordStatus get status {
+    if (!isEnabled) return ActivityRecordStatus.disabled;
+    if (isCompleted) return ActivityRecordStatus.completed;
+    if (isSkipped) return ActivityRecordStatus.skipped;
+    if (actualDuration > Duration.zero) return ActivityRecordStatus.partial;
+    return ActivityRecordStatus.pending;
+  }
+
+  bool get isBuiltIn => id == 'meditation' || id == 'walking' || id == 'dumbbells';
+
+  bool get isWorkout => activityType == ActivityType.workout || activityType == ActivityType.dumbbells;
+
+  String get typeLabel => isWorkout ? 'Workout' : 'Timer';
+
   Activity copyWith({
     String? id,
     String? name,
     ActivityType? activityType,
     Duration? defaultDuration,
+    Duration? actualDuration,
+    bool? isEnabled,
     bool? isCompleted,
     bool? isSkipped,
     List<int>? completedSetsReps,
@@ -95,6 +164,8 @@ class Activity {
       name: name ?? this.name,
       activityType: activityType ?? this.activityType,
       defaultDuration: defaultDuration ?? this.defaultDuration,
+      actualDuration: actualDuration ?? this.actualDuration,
+      isEnabled: isEnabled ?? this.isEnabled,
       isCompleted: isCompleted ?? this.isCompleted,
       isSkipped: isSkipped ?? this.isSkipped,
       completedSetsReps: completedSetsReps ?? this.completedSetsReps,
@@ -108,6 +179,8 @@ class Activity {
       'activityType': activityType.name,
       'defaultDurationSeconds': defaultDuration.inSeconds,
       'defaultDurationMinutes': defaultDuration.inMinutes,
+      'actualDurationSeconds': actualDuration.inSeconds,
+      'isEnabled': isEnabled,
       'isCompleted': isCompleted,
       'isSkipped': isSkipped,
       'completedSetsReps': completedSetsReps,
@@ -123,6 +196,10 @@ class Activity {
       final minutes = (json['defaultDurationMinutes'] as num?)?.toInt() ?? 0;
       duration = Duration(minutes: minutes < 0 ? 0 : minutes);
     }
+
+    final actualSec = (json['actualDurationSeconds'] as num?)?.toInt() ?? 0;
+    final actualDuration = Duration(seconds: actualSec < 0 ? 0 : actualSec);
+    final isEnabled = json['isEnabled'] != false;
 
     final rawReps = json['completedSetsReps'];
     final List<int> parsedReps = [];
@@ -143,6 +220,8 @@ class Activity {
         orElse: () => ActivityType.general,
       ),
       defaultDuration: duration,
+      actualDuration: actualDuration,
+      isEnabled: isEnabled,
       isCompleted: json['isCompleted'] == true,
       isSkipped: json['isSkipped'] == true,
       completedSetsReps: parsedReps,
@@ -157,6 +236,8 @@ class Activity {
         other.name == name &&
         other.activityType == activityType &&
         other.defaultDuration == defaultDuration &&
+        other.actualDuration == actualDuration &&
+        other.isEnabled == isEnabled &&
         other.isCompleted == isCompleted &&
         other.isSkipped == isSkipped &&
         listEquals(other.completedSetsReps, completedSetsReps);
@@ -168,6 +249,8 @@ class Activity {
         name,
         activityType,
         defaultDuration,
+        actualDuration,
+        isEnabled,
         isCompleted,
         isSkipped,
         Object.hashAll(completedSetsReps),

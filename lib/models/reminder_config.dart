@@ -72,7 +72,7 @@ class ReminderConfig {
       case 'dumbbells':
         return 301;
       default:
-        return 401;
+        return 1000 + (activityId.hashCode.abs() % 10000) * 2;
     }
   }
 
@@ -85,7 +85,7 @@ class ReminderConfig {
       case 'dumbbells':
         return 302;
       default:
-        return 402;
+        return 1000 + (activityId.hashCode.abs() % 10000) * 2 + 1;
     }
   }
 
@@ -98,6 +98,7 @@ class ReminderConfig {
 
   String get formattedMainTime => formatTime(mainHour, mainMinute);
   String get formattedBackupTime => formatTime(backupHour, backupMinute);
+  bool get hasAnyReminder => isMainEnabled || isBackupEnabled;
 
   ReminderConfig copyWith({
     String? activityId,

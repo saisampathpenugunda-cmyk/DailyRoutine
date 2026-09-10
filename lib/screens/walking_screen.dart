@@ -4,6 +4,7 @@ import '../controllers/routine_timer_controller.dart';
 import '../models/activity.dart';
 import '../repositories/activity_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/duration_control.dart';
 
 class WalkingScreen extends StatefulWidget {
   final Activity activity;
@@ -22,12 +23,14 @@ class WalkingScreen extends StatefulWidget {
 }
 
 class _WalkingScreenState extends State<WalkingScreen> {
+  late Activity _activity;
   late final RoutineTimerController _timer;
   Timer? _ticker;
 
   @override
   void initState() {
     super.initState();
+    _activity = widget.activity;
     _timer = widget.timer ??
         widget.repository.getTimerController(
           widget.activity.id,
@@ -53,7 +56,7 @@ class _WalkingScreenState extends State<WalkingScreen> {
     _ticker?.cancel();
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       final completed = _timer.tick();
-      if (completed) {
+      if (completed || _timer.isCompleted) {
         _markCompleted();
         _ticker?.cancel();
       }
@@ -92,9 +95,42 @@ class _WalkingScreenState extends State<WalkingScreen> {
 
   void _markCompleted() {
     widget.repository.setActivityCompletion(
-      widget.activity.id,
+      _activity.id,
       isCompleted: true,
     );
+    if (mounted) {
+      setState(() {
+        _activity = _activity.copyWith(isCompleted: true);
+      });
+    }
+  }
+
+  void _onDurationChanged(Duration newDuration) {
+    final updated = _activity.copyWith(defaultDuration: newDuration);
+    widget.repository.updateActivity(updated);
+    if (mounted) {
+      setState(() {
+        _activity = updated;
+      });
+    }
+  }
+
+  void _handleToggleEnabled(bool enabled) {
+    final success = widget.repository.setActivityEnabled(_activity.id, enabled);
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot disable an activity with an active or paused session. Please finish or reset the session first.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _activity = _activity.copyWith(isEnabled: enabled);
+      });
+    }
   }
 
   @override
@@ -111,8 +147,36 @@ class _WalkingScreenState extends State<WalkingScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.activity.name),
+        title: Text(_activity.name),
         elevation: 0,
+        actions: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _activity.isEnabled ? 'Enabled' : 'Disabled',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: _activity.isEnabled ? colorScheme.primary : colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+              const SizedBox(width: 4),
+              SizedBox(
+                height: 30,
+                child: FittedBox(
+                  fit: BoxFit.contain,
+                  child: Switch(
+                    key: const Key('detail_enable_switch'),
+                    value: _activity.isEnabled,
+                    onChanged: _handleToggleEnabled,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+        ],
       ),
       body: SafeArea(
         child: Padding(
@@ -121,7 +185,7 @@ class _WalkingScreenState extends State<WalkingScreen> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               _ActivityInfoCard(
-                activity: widget.activity,
+                activity: _activity,
                 colorScheme: colorScheme,
                 theme: theme,
               ),
@@ -129,6 +193,10 @@ class _WalkingScreenState extends State<WalkingScreen> {
                 timer: _timer,
                 colorScheme: colorScheme,
                 theme: theme,
+              ),
+              DurationControl(
+                duration: _activity.defaultDuration,
+                onDurationChanged: _onDurationChanged,
               ),
               _Controls(
                 timerState: _timer.state,

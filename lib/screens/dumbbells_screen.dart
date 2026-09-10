@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/activity.dart';
 import '../repositories/activity_repository.dart';
 import '../theme/app_theme.dart';
+import '../widgets/duration_control.dart';
 
 class DumbbellsScreen extends StatefulWidget {
   final Activity activity;
@@ -59,6 +60,16 @@ class _DumbbellsScreenState extends State<DumbbellsScreen> {
     );
   }
 
+  void _onDurationChanged(Duration newDuration) {
+    final updated = _activity.copyWith(defaultDuration: newDuration);
+    widget.repository.updateActivity(updated);
+    if (mounted) {
+      setState(() {
+        _activity = updated;
+      });
+    }
+  }
+
   void _skipActivity() {
     widget.repository.setActivitySkipped(_activity.id, isSkipped: true);
     setState(() {
@@ -66,6 +77,24 @@ class _DumbbellsScreenState extends State<DumbbellsScreen> {
     });
     if (mounted) {
       Navigator.of(context).pop();
+    }
+  }
+
+  void _handleToggleEnabled(bool enabled) {
+    final success = widget.repository.setActivityEnabled(_activity.id, enabled);
+    if (!success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Cannot disable an activity with an active or paused session. Please finish or reset the session first.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    if (mounted) {
+      setState(() {
+        _activity = _activity.copyWith(isEnabled: enabled);
+      });
     }
   }
 
@@ -80,16 +109,51 @@ class _DumbbellsScreenState extends State<DumbbellsScreen> {
         title: Text(_activity.name),
         elevation: 0,
         backgroundColor: Colors.transparent,
+        actions: [
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                _activity.isEnabled ? 'Enabled' : 'Disabled',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: _activity.isEnabled ? colorScheme.primary : colorScheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+              const SizedBox(width: 4),
+              SizedBox(
+                height: 30,
+                child: FittedBox(
+                  fit: BoxFit.contain,
+                  child: Switch(
+                    key: const Key('detail_enable_switch'),
+                    value: _activity.isEnabled,
+                    onChanged: _handleToggleEnabled,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+            ],
+          ),
+        ],
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: SizedBox(
-            width: double.infinity,
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-              const Spacer(),
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 12.0),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 24.0,
+                ),
+                child: IntrinsicHeight(
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Spacer(),
               if (isDone) ...[
                 Icon(
                   Icons.check_circle_outline,
@@ -116,7 +180,7 @@ class _DumbbellsScreenState extends State<DumbbellsScreen> {
               ] else ...[
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.symmetric(vertical: 32, horizontal: 20),
+                  padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
                   decoration: BoxDecoration(
                     color: colorScheme.surface,
                     borderRadius: BorderRadius.circular(20),
@@ -139,8 +203,8 @@ class _DumbbellsScreenState extends State<DumbbellsScreen> {
                     children: [
                       // Circular progress ring enclosing dumbbell icon
                       SizedBox(
-                        width: 140,
-                        height: 140,
+                        width: 110,
+                        height: 110,
                         child: Stack(
                           alignment: Alignment.center,
                           children: [
@@ -157,10 +221,10 @@ class _DumbbellsScreenState extends State<DumbbellsScreen> {
                               children: [
                                 Icon(
                                   Icons.fitness_center,
-                                  size: 38,
+                                  size: 32,
                                   color: context.appColors.primary,
                                 ),
-                                const SizedBox(height: 6),
+                                const SizedBox(height: 4),
                                 Text(
                                   'Workout Session',
                                   style: TextStyle(
@@ -182,9 +246,9 @@ class _DumbbellsScreenState extends State<DumbbellsScreen> {
                           ],
                         ),
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 14),
                       Container(
-                        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
                         decoration: BoxDecoration(
                           color: colorScheme.primaryContainer.withValues(alpha: 0.35),
                           borderRadius: BorderRadius.circular(14),
@@ -245,10 +309,15 @@ class _DumbbellsScreenState extends State<DumbbellsScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(height: 36),
+                const SizedBox(height: 12),
+                DurationControl(
+                  duration: _activity.defaultDuration,
+                  onDurationChanged: _onDurationChanged,
+                ),
+                const SizedBox(height: 16),
                 SizedBox(
                   width: double.infinity,
-                  height: 64,
+                  height: 52,
                   child: FilledButton(
                     onPressed: _completeSet,
                     style: FilledButton.styleFrom(
@@ -259,13 +328,13 @@ class _DumbbellsScreenState extends State<DumbbellsScreen> {
                     child: Text(
                       _currentSet == _totalSets ? 'Complete Final Set' : 'Complete Set $_currentSet',
                       style: const TextStyle(
-                        fontSize: 20,
+                        fontSize: 18,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 12),
                 TextButton.icon(
                   onPressed: _skipActivity,
                   icon: const Icon(Icons.close),
@@ -282,6 +351,10 @@ class _DumbbellsScreenState extends State<DumbbellsScreen> {
         ),
       ),
     );
+  },
+),
+),
+);
   }
 }
 

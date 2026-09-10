@@ -27,6 +27,9 @@ abstract class ActivityRepository {
   void resetTimer(String activityId);
   Future<bool> checkDateRollover({DateTime? now});
   double getActivityProgress(Activity activity);
+  bool isActivityInProgress(String activityId);
+  bool setActivityEnabled(String activityId, bool isEnabled);
+  bool deleteActivity(String activityId);
 }
 
 class InMemoryActivityRepository implements ActivityRepository {
@@ -182,11 +185,82 @@ class InMemoryActivityRepository implements ActivityRepository {
     final index = _activities.indexWhere((a) => a.id == activity.id);
     if (index != -1) {
       _activities[index] = activity;
+
+      // If timer is unstarted (initial), update duration immediately.
+      // If timer is running or paused, leave the current session untouched.
+      final controller = _timerControllers[activity.id];
+      if (controller != null && controller.isInitial) {
+        controller.updateDurationIfInitial(activity.defaultDuration);
+      }
+
       _syncTodayHistory();
-      if (activity.isCompleted || activity.isSkipped) {
+      if (!activity.isEnabled) {
         notificationService?.cancelActivityReminders(activity.id);
+      } else if (activity.isCompleted || activity.isSkipped) {
+        notificationService?.cancelActivityReminders(activity.id);
+      } else {
+        final config = getReminderConfig(activity.id);
+        if (config.hasAnyReminder) {
+          notificationService?.scheduleActivityReminders(
+            config,
+            isCompletedToday: activity.isCompleted,
+            isSkippedToday: activity.isSkipped,
+          );
+        }
       }
     }
+  }
+
+  @override
+  bool isActivityInProgress(String activityId) {
+    final activity = getActivityById(activityId);
+    if (activity == null) return false;
+
+    final controller = _timerControllers[activityId];
+    if (controller != null && (controller.isRunning || controller.isPaused)) {
+      return true;
+    }
+
+    if ((activity.activityType == ActivityType.dumbbells ||
+            activity.activityType == ActivityType.workout) &&
+        activity.completedSetsReps.isNotEmpty &&
+        !activity.isCompleted) {
+      return true;
+    }
+
+    return false;
+  }
+
+  @override
+  bool setActivityEnabled(String activityId, bool isEnabled) {
+    if (!isEnabled && isActivityInProgress(activityId)) {
+      return false;
+    }
+
+    final index = _activities.indexWhere((a) => a.id == activityId);
+    if (index == -1) return false;
+
+    final current = _activities[index];
+    if (current.isEnabled == isEnabled) return true;
+
+    final updated = current.copyWith(isEnabled: isEnabled);
+    _activities[index] = updated;
+
+    if (!isEnabled) {
+      notificationService?.cancelActivityReminders(activityId);
+    } else {
+      final config = getReminderConfig(activityId);
+      if (config.hasAnyReminder && !updated.isCompleted && !updated.isSkipped) {
+        notificationService?.scheduleActivityReminders(
+          config,
+          isCompletedToday: updated.isCompleted,
+          isSkippedToday: updated.isSkipped,
+        );
+      }
+    }
+
+    _syncTodayHistory();
+    return true;
   }
 
   @override
@@ -206,6 +280,20 @@ class InMemoryActivityRepository implements ActivityRepository {
   }
 
   @override
+  bool deleteActivity(String activityId) {
+    final activity = getActivityById(activityId);
+    if (activity == null) return false;
+    if (isActivityInProgress(activityId)) return false;
+
+    _activities.removeWhere((a) => a.id == activityId);
+    _reminderConfigs.remove(activityId);
+    _timerControllers.remove(activityId);
+    notificationService?.cancelActivityReminders(activityId);
+    _syncTodayHistory();
+    return true;
+  }
+
+  @override
   List<ReminderConfig> getReminderConfigs() {
     return List.unmodifiable(_reminderConfigs.values.toList());
   }
@@ -219,10 +307,14 @@ class InMemoryActivityRepository implements ActivityRepository {
   void updateReminderConfig(ReminderConfig config) {
     _reminderConfigs[config.activityId] = config;
     final activity = getActivityById(config.activityId);
+    if (activity == null || !activity.isEnabled) {
+      notificationService?.cancelActivityReminders(config.activityId);
+      return;
+    }
     notificationService?.scheduleActivityReminders(
       config,
-      isCompletedToday: activity?.isCompleted ?? false,
-      isSkippedToday: activity?.isSkipped ?? false,
+      isCompletedToday: activity.isCompleted,
+      isSkippedToday: activity.isSkipped,
     );
   }
 
@@ -247,7 +339,13 @@ class InMemoryActivityRepository implements ActivityRepository {
 
   @override
   void resetTimer(String activityId) {
-    _timerControllers[activityId]?.reset();
+    final activity = getActivityById(activityId);
+    final duration = activity?.defaultDuration ?? const Duration(minutes: 10);
+    _timerControllers[activityId] = RoutineTimerController(
+      totalDuration: duration,
+      initialRemaining: duration,
+      now: _clock,
+    );
   }
 
   @override
@@ -256,17 +354,29 @@ class InMemoryActivityRepository implements ActivityRepository {
     if (activity.isSkipped) return 0.0;
 
     if (activity.activityType == ActivityType.meditation ||
-        activity.activityType == ActivityType.walking) {
+        activity.activityType == ActivityType.walking ||
+        activity.activityType == ActivityType.timer) {
       final controller = getTimerController(
         activity.id,
         defaultDuration: activity.defaultDuration,
       );
+      if (controller.isCompleted || controller.remaining <= Duration.zero) {
+        if (!activity.isCompleted) {
+          setActivityCompletion(activity.id, isCompleted: true);
+        }
+        return 1.0;
+      }
       return controller.completionProgress;
     }
 
-    if (activity.activityType == ActivityType.dumbbells) {
+    if (activity.activityType == ActivityType.dumbbells ||
+        activity.activityType == ActivityType.workout) {
       if (activity.completedSetsReps.isNotEmpty) {
-        return (activity.completedSetsReps.length / 3.0).clamp(0.0, 1.0);
+        final progress = (activity.completedSetsReps.length / 3.0).clamp(0.0, 1.0);
+        if (progress >= 1.0 && !activity.isCompleted) {
+          setActivityCompletion(activity.id, isCompleted: true);
+        }
+        return progress;
       }
       return 0.0;
     }
@@ -286,6 +396,7 @@ class InMemoryActivityRepository implements ActivityRepository {
       return _activities.map((a) => a.copyWith(
         isCompleted: false,
         isSkipped: false,
+        actualDuration: Duration.zero,
         completedSetsReps: const [],
       )).toList();
     }
@@ -315,6 +426,19 @@ class InMemoryActivityRepository implements ActivityRepository {
         isSkipped: false,
       ),
     ];
+  }
+
+  List<Activity> _createActivitiesSnapshotWithElapsed() {
+    return _activities.map((activity) {
+      Duration elapsed = Duration.zero;
+      final controller = _timerControllers[activity.id];
+      if (activity.isCompleted) {
+        elapsed = controller != null ? controller.totalDuration : activity.defaultDuration;
+      } else if (controller != null) {
+        elapsed = controller.elapsedDuration;
+      }
+      return activity.copyWith(actualDuration: elapsed);
+    }).toList();
   }
 
   void _initFirstTrackedDate() {
@@ -349,7 +473,7 @@ class InMemoryActivityRepository implements ActivityRepository {
       if (key == todayKey) {
         final todaySnapshot = DayHistory(
           dateKey: todayKey,
-          activities: List.of(_activities),
+          activities: _createActivitiesSnapshotWithElapsed(),
           recordedAt: current,
         );
         if (existingIndex != -1) {
@@ -379,7 +503,7 @@ class InMemoryActivityRepository implements ActivityRepository {
     final todayKey = _formatDateKey(current);
     final snapshot = DayHistory(
       dateKey: todayKey,
-      activities: List.of(_activities),
+      activities: _createActivitiesSnapshotWithElapsed(),
       recordedAt: current,
     );
     final index = _history.indexWhere((h) => h.dateKey == todayKey);
@@ -401,7 +525,7 @@ class InMemoryActivityRepository implements ActivityRepository {
         final existingIndex = _history.indexWhere((h) => h.dateKey == _lastDateKey);
         final snapshot = DayHistory(
           dateKey: _lastDateKey!,
-          activities: List.of(_activities),
+          activities: _createActivitiesSnapshotWithElapsed(),
           recordedAt: current,
         );
         if (existingIndex != -1) {
@@ -415,12 +539,14 @@ class InMemoryActivityRepository implements ActivityRepository {
         _activities[i] = _activities[i].copyWith(
           isCompleted: false,
           isSkipped: false,
+          actualDuration: Duration.zero,
           completedSetsReps: const [],
         );
       }
       for (final controller in _timerControllers.values) {
         controller.reset();
       }
+      _timerControllers.clear();
 
       if (autoCreateTodayHistory) {
         _ensureDailyRecords(todayKey, current);

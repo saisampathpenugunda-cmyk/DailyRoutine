@@ -135,8 +135,8 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
         debugPrint('Error loading reminder configs: $e');
       }
     }
-    for (final id in ['meditation', 'walking', 'dumbbells']) {
-      _reminderConfigs.putIfAbsent(id, () => ReminderConfig.defaultFor(id));
+    for (final activity in _activities) {
+      _reminderConfigs.putIfAbsent(activity.id, () => ReminderConfig.defaultFor(activity.id));
     }
   }
 
@@ -188,7 +188,7 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
               }
             }
           }
-          if (loadedActivities.isNotEmpty) {
+          if (decoded.isEmpty || loadedActivities.isNotEmpty) {
             _activities.clear();
             _activities.addAll(loadedActivities);
             return;
@@ -220,6 +220,7 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
         _activities[i] = _activities[i].copyWith(
           isCompleted: false,
           isSkipped: false,
+          actualDuration: Duration.zero,
           completedSetsReps: const [],
         );
       }
@@ -228,6 +229,7 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
       for (final controller in _timerControllers.values) {
         controller.reset();
       }
+      _timerControllers.clear();
       await _prefs.remove(_timersKey);
 
       // 4. Ensure all missing days are created at 0% and today's record exists at 0%
@@ -258,7 +260,7 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
     final existingIndex = _history.indexWhere((h) => h.dateKey == dateKey);
     final snapshot = DayHistory(
       dateKey: dateKey,
-      activities: List.of(_activities),
+      activities: _createActivitiesSnapshotWithElapsed(),
       recordedAt: recordedAt ?? DateTime.now(),
     );
 
@@ -271,11 +273,25 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
     await _saveHistory();
   }
 
+  List<Activity> _createActivitiesSnapshotWithElapsed() {
+    return _activities.map((activity) {
+      Duration elapsed = Duration.zero;
+      final controller = _timerControllers[activity.id];
+      if (activity.isCompleted) {
+        elapsed = controller != null ? controller.totalDuration : activity.defaultDuration;
+      } else if (controller != null) {
+        elapsed = controller.elapsedDuration;
+      }
+      return activity.copyWith(actualDuration: elapsed);
+    }).toList();
+  }
+
   List<Activity> _createCleanActivitiesSnapshot() {
     if (_activities.isNotEmpty) {
       return _activities.map((a) => a.copyWith(
         isCompleted: false,
         isSkipped: false,
+        actualDuration: Duration.zero,
         completedSetsReps: const [],
       )).toList();
     }
@@ -355,7 +371,7 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
       if (key == todayKey) {
         final todaySnapshot = DayHistory(
           dateKey: todayKey,
-          activities: List.of(_activities),
+          activities: _createActivitiesSnapshotWithElapsed(),
           recordedAt: current,
         );
         if (existingIndex != -1) {
@@ -390,7 +406,7 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
     final todayKey = _formatDateKey(current);
     final snapshot = DayHistory(
       dateKey: todayKey,
-      activities: List.of(_activities),
+      activities: _createActivitiesSnapshotWithElapsed(),
       recordedAt: current,
     );
     final index = _history.indexWhere((h) => h.dateKey == todayKey);
@@ -550,12 +566,103 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
     final index = _activities.indexWhere((a) => a.id == activity.id);
     if (index != -1) {
       _activities[index] = activity;
+
+      // If timer is unstarted (initial), update duration immediately.
+      // If timer is running or paused, leave the current session untouched.
+      final controller = _timerControllers[activity.id];
+      if (controller != null && controller.isInitial) {
+        controller.updateDurationIfInitial(activity.defaultDuration);
+        _saveTimerStates();
+      }
+
       _saveActivities();
       _syncTodayHistory();
-      if (activity.isCompleted || activity.isSkipped) {
+      if (!activity.isEnabled) {
         notificationService?.cancelActivityReminders(activity.id);
+      } else if (activity.isCompleted || activity.isSkipped) {
+        notificationService?.cancelActivityReminders(activity.id);
+      } else {
+        final config = getReminderConfig(activity.id);
+        if (config.hasAnyReminder) {
+          notificationService?.scheduleActivityReminders(
+            config,
+            isCompletedToday: activity.isCompleted,
+            isSkippedToday: activity.isSkipped,
+          );
+        }
       }
     }
+  }
+
+  @override
+  bool isActivityInProgress(String activityId) {
+    final activity = getActivityById(activityId);
+    if (activity == null) return false;
+
+    final controller = _timerControllers[activityId];
+    if (controller != null && (controller.isRunning || controller.isPaused)) {
+      return true;
+    }
+
+    if ((activity.activityType == ActivityType.dumbbells ||
+            activity.activityType == ActivityType.workout) &&
+        activity.completedSetsReps.isNotEmpty &&
+        !activity.isCompleted) {
+      return true;
+    }
+
+    return false;
+  }
+
+  @override
+  bool setActivityEnabled(String activityId, bool isEnabled) {
+    if (!isEnabled && isActivityInProgress(activityId)) {
+      return false;
+    }
+
+    final index = _activities.indexWhere((a) => a.id == activityId);
+    if (index == -1) return false;
+
+    final current = _activities[index];
+    if (current.isEnabled == isEnabled) return true;
+
+    final updated = current.copyWith(isEnabled: isEnabled);
+    _activities[index] = updated;
+
+    if (!isEnabled) {
+      notificationService?.cancelActivityReminders(activityId);
+    } else {
+      final config = getReminderConfig(activityId);
+      if (config.hasAnyReminder && !updated.isCompleted && !updated.isSkipped) {
+        notificationService?.scheduleActivityReminders(
+          config,
+          isCompletedToday: updated.isCompleted,
+          isSkippedToday: updated.isSkipped,
+        );
+      }
+    }
+
+    _saveActivities();
+    _syncTodayHistory();
+    return true;
+  }
+
+  @override
+  bool deleteActivity(String activityId) {
+    final activity = getActivityById(activityId);
+    if (activity == null) return false;
+    if (isActivityInProgress(activityId)) return false;
+
+    _activities.removeWhere((a) => a.id == activityId);
+    _reminderConfigs.remove(activityId);
+    _timerControllers.remove(activityId);
+    notificationService?.cancelActivityReminders(activityId);
+
+    _saveActivities();
+    _saveReminderConfigs();
+    _saveTimerStates();
+    _syncTodayHistory();
+    return true;
   }
 
   @override
@@ -581,10 +688,14 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
     _reminderConfigs[config.activityId] = config;
     _saveReminderConfigs();
     final activity = getActivityById(config.activityId);
+    if (activity == null || !activity.isEnabled) {
+      notificationService?.cancelActivityReminders(config.activityId);
+      return;
+    }
     notificationService?.scheduleActivityReminders(
       config,
-      isCompletedToday: activity?.isCompleted ?? false,
-      isSkippedToday: activity?.isSkipped ?? false,
+      isCompletedToday: activity.isCompleted,
+      isSkippedToday: activity.isSkipped,
     );
   }
 
@@ -612,7 +723,17 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
 
   @override
   void resetTimer(String activityId) {
-    _timerControllers[activityId]?.reset();
+    final activity = getActivityById(activityId);
+    final duration = activity?.defaultDuration ?? const Duration(minutes: 10);
+    final isDone = activity?.isCompleted ?? false;
+    final controller = RoutineTimerController(
+      totalDuration: duration,
+      initialState: isDone ? TimerState.completed : TimerState.initial,
+      initialRemaining: isDone ? Duration.zero : duration,
+      now: _clock,
+    );
+    _timerControllers[activityId] = controller;
+    _attachTimerListener(activityId, controller);
     _saveTimerStates();
   }
 
@@ -622,17 +743,29 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
     if (activity.isSkipped) return 0.0;
 
     if (activity.activityType == ActivityType.meditation ||
-        activity.activityType == ActivityType.walking) {
+        activity.activityType == ActivityType.walking ||
+        activity.activityType == ActivityType.timer) {
       final controller = getTimerController(
         activity.id,
         defaultDuration: activity.defaultDuration,
       );
+      if (controller.isCompleted || controller.remaining <= Duration.zero) {
+        if (!activity.isCompleted) {
+          setActivityCompletion(activity.id, isCompleted: true);
+        }
+        return 1.0;
+      }
       return controller.completionProgress;
     }
 
-    if (activity.activityType == ActivityType.dumbbells) {
+    if (activity.activityType == ActivityType.dumbbells ||
+        activity.activityType == ActivityType.workout) {
       if (activity.completedSetsReps.isNotEmpty) {
-        return (activity.completedSetsReps.length / 3.0).clamp(0.0, 1.0);
+        final progress = (activity.completedSetsReps.length / 3.0).clamp(0.0, 1.0);
+        if (progress >= 1.0 && !activity.isCompleted) {
+          setActivityCompletion(activity.id, isCompleted: true);
+        }
+        return progress;
       }
       return 0.0;
     }

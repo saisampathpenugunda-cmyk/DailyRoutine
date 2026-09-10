@@ -179,6 +179,12 @@ class LocalNotificationService implements NotificationService {
             orElse: () => null,
           );
 
+      if (activity != null && !activity.isEnabled) {
+        // Disabled activity must not trigger reminders
+        await cancelActivityReminders(config.activityId);
+        continue;
+      }
+
       final isCompleted = activity?.isCompleted ?? false;
       final isSkipped = activity?.isSkipped ?? false;
 
@@ -399,6 +405,12 @@ class InMemoryNotificationService implements NotificationService {
             (a) => a?.id == config.activityId,
             orElse: () => null,
           );
+
+      if (activity != null && !activity.isEnabled) {
+        await cancelActivityReminders(config.activityId);
+        continue;
+      }
+
       final isCompleted = activity?.isCompleted ?? false;
       final isSkipped = activity?.isSkipped ?? false;
 

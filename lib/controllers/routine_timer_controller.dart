@@ -6,7 +6,7 @@ enum TimerState { initial, running, paused, completed }
 /// instead it records the wall-clock end time and computes remaining duration
 /// on every tick.
 class RoutineTimerController {
-  final Duration totalDuration;
+  Duration _totalDuration;
   final DateTime Function() _now;
 
   TimerState _state = TimerState.initial;
@@ -19,25 +19,32 @@ class RoutineTimerController {
   final List<void Function()> _listeners = [];
 
   RoutineTimerController({
-    required this.totalDuration,
+    required Duration totalDuration,
     Duration? initialRemaining,
     TimerState initialState = TimerState.initial,
     DateTime? initialEndTime,
     DateTime Function()? now,
-  })  : _remaining = initialRemaining ?? totalDuration,
+  })  : _totalDuration = totalDuration,
+        _remaining = initialRemaining ?? totalDuration,
         _state = initialState,
         _endTime = initialEndTime,
         _now = now ?? DateTime.now;
 
   // ── Getters ──────────────────────────────────────────────────────────────
 
+  Duration get totalDuration => _totalDuration;
   TimerState get state => _state;
   Duration get remaining => _remaining;
   DateTime? get endTime => _endTime;
   bool get isInitial => _state == TimerState.initial;
   bool get isRunning => _state == TimerState.running;
   bool get isPaused => _state == TimerState.paused;
-  bool get isCompleted => _state == TimerState.completed;
+  bool get isCompleted =>
+      _state == TimerState.completed ||
+      (_state == TimerState.running &&
+          _endTime != null &&
+          !_now().isBefore(_endTime!)) ||
+      (_remaining <= Duration.zero && _state != TimerState.initial);
 
   /// Formatted remaining time as `MM:SS`.
   String get formattedTime {
@@ -50,17 +57,48 @@ class RoutineTimerController {
   /// Progress from 1.0 (full) to 0.0 (empty).
   double get progress {
     if (totalDuration == Duration.zero || totalDuration.inMilliseconds == 0) return 0;
+    if (isCompleted) return 0.0;
     return _remaining.inMilliseconds / totalDuration.inMilliseconds;
   }
 
   /// Completion progress from 0.0 (not started) to 1.0 (fully completed).
   double get completionProgress {
     if (totalDuration == Duration.zero || totalDuration.inMilliseconds == 0) return 0.0;
-    if (_state == TimerState.completed) return 1.0;
+    if (isCompleted) return 1.0;
     if (_state == TimerState.initial) return 0.0;
     final currentRemaining = isRunning ? _computeRemaining() : _remaining;
+    if (currentRemaining <= Duration.zero || (_endTime != null && !_now().isBefore(_endTime!))) {
+      return 1.0;
+    }
     final elapsedMs = totalDuration.inMilliseconds - currentRemaining.inMilliseconds;
+    if (elapsedMs >= totalDuration.inMilliseconds) return 1.0;
     return (elapsedMs / totalDuration.inMilliseconds).clamp(0.0, 1.0);
+  }
+
+  /// Active elapsed duration (excluding paused intervals).
+  Duration get elapsedDuration {
+    if (totalDuration == Duration.zero) return Duration.zero;
+    if (isCompleted) return totalDuration;
+    if (_state == TimerState.initial) return Duration.zero;
+    final currentRemaining = isRunning ? _computeRemaining() : _remaining;
+    if (currentRemaining <= Duration.zero || (_endTime != null && !_now().isBefore(_endTime!))) {
+      return totalDuration;
+    }
+    final elapsedMs = totalDuration.inMilliseconds - currentRemaining.inMilliseconds;
+    if (elapsedMs >= totalDuration.inMilliseconds) return totalDuration;
+    return Duration(milliseconds: elapsedMs.clamp(0, totalDuration.inMilliseconds));
+  }
+
+  /// Updates total duration and remaining if unstarted. Returns true if updated.
+  /// Running or paused sessions are strictly left untouched.
+  bool updateDurationIfInitial(Duration newDuration) {
+    if (_state == TimerState.initial) {
+      _totalDuration = newDuration;
+      _remaining = newDuration;
+      _notify();
+      return true;
+    }
+    return false;
   }
 
   // ── Listener management ──────────────────────────────────────────────────
@@ -123,7 +161,7 @@ class RoutineTimerController {
 
     _remaining = _computeRemaining();
 
-    if (_remaining <= Duration.zero) {
+    if (_remaining <= Duration.zero || (_endTime != null && !_now().isBefore(_endTime!))) {
       _remaining = Duration.zero;
       _endTime = null;
       _state = TimerState.completed;
@@ -189,7 +227,7 @@ class RoutineTimerController {
     if (state == TimerState.running) {
       if (endTime != null) {
         final current = clock();
-        if (current.isAfter(endTime)) {
+        if (!current.isBefore(endTime)) {
           remaining = Duration.zero;
           effectiveState = TimerState.completed;
         } else {

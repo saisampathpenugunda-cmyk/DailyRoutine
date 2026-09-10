@@ -12,9 +12,10 @@ class DayHistory {
     required this.recordedAt,
   });
 
-  int get completedCount => activities.where((a) => a.isCompleted).length;
-  int get skippedCount => activities.where((a) => a.isSkipped).length;
-  int get totalCount => activities.length;
+  List<Activity> get enabledActivities => activities.where((a) => a.isEnabled).toList();
+  int get completedCount => enabledActivities.where((a) => a.isCompleted).length;
+  int get skippedCount => enabledActivities.where((a) => a.isSkipped).length;
+  int get totalCount => enabledActivities.length;
 
   double get completionRate {
     if (totalCount == 0) return 0.0;

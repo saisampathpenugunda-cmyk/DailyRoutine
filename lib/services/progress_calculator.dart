@@ -187,11 +187,20 @@ class ProgressCalculator {
     int dumbbellReps = 0;
 
     for (final day in records) {
-      for (final activity in day.activities) {
+      for (final activity in day.enabledActivities) {
         totalActivities++;
         if (activity.isCompleted) {
           completedCount++;
-          totalDuration += activity.defaultDuration;
+          totalDuration += activity.actualDuration > Duration.zero
+              ? activity.actualDuration
+              : activity.defaultDuration;
+        } else if (activity.actualDuration > Duration.zero) {
+          totalDuration += activity.actualDuration;
+          if (activity.isSkipped) {
+            skippedCount++;
+          } else {
+            missedCount++;
+          }
         } else if (activity.isSkipped) {
           skippedCount++;
         } else {

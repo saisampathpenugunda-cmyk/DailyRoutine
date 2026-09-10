@@ -339,8 +339,6 @@ class _ReminderCard extends StatelessWidget {
                     const SizedBox(width: 8),
                     Switch(
                       value: config.isMainEnabled,
-                      activeThumbColor: colors.primary,
-                      activeTrackColor: colors.primary.withValues(alpha: 0.3),
                       onChanged: onToggleMain,
                     ),
                   ],
@@ -398,8 +396,6 @@ class _ReminderCard extends StatelessWidget {
                     ],
                     Switch(
                       value: config.isBackupEnabled,
-                      activeThumbColor: colors.primary,
-                      activeTrackColor: colors.primary.withValues(alpha: 0.3),
                       onChanged: onToggleBackup,
                     ),
                   ],
@@ -413,6 +409,16 @@ class _ReminderCard extends StatelessWidget {
   }
 
   Widget _buildStatusHint(AppThemeColors colors, bool isCompleted, bool isSkipped) {
+    if (activity != null && !activity!.isEnabled) {
+      return Text(
+        "Activity disabled (reminders inactive)",
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: colors.secondary,
+        ),
+      );
+    }
     if (isCompleted) {
       return Text(
         "Today's alerts cancelled (completed)",

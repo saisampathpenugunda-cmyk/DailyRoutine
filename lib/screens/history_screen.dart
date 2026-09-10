@@ -169,7 +169,7 @@ class _DayHistoryCard extends StatelessWidget {
             const SizedBox(height: 10),
             Divider(color: colors.border, height: 1),
             const SizedBox(height: 8),
-            ...day.activities.map((activity) => _ActivityHistoryRow(activity: activity)),
+            ...day.enabledActivities.map((activity) => _ActivityHistoryRow(activity: activity)),
           ],
         ),
       ),
@@ -200,6 +200,8 @@ class _ActivityHistoryRow extends StatelessWidget {
     String details = activity.formattedDuration;
     if (activity.activityType == ActivityType.dumbbells && activity.completedSetsReps.isNotEmpty) {
       details = 'Sets: ${activity.completedSetsReps.join(', ')} reps';
+    } else if (activity.actualDuration > Duration.zero && !activity.isCompleted) {
+      details = 'Done: ${activity.formattedActualDuration} of ${activity.formattedDuration}';
     }
 
     return Padding(
