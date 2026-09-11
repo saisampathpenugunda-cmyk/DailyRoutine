@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../models/activity.dart';
+import '../models/daily_summary.dart';
 import '../models/progress_statistics.dart';
 import '../repositories/activity_repository.dart';
 import '../services/progress_calculator.dart';
@@ -36,6 +38,7 @@ class _ProgressScreenState extends State<ProgressScreen> {
     );
 
     return ListView(
+      cacheExtent: 1500.0,
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       children: [
         // ── 1. Period Selector ──────────────────────────────────────────────
@@ -72,7 +75,16 @@ class _ProgressScreenState extends State<ProgressScreen> {
         _WorkoutStatsCard(stats: stats),
         const SizedBox(height: 10),
 
-        // ── 5. Monthly Final Accuracy (Month View Only) ─────────────────────
+        // ── 5. Today's Summary (Day View Only) ──────────────────────────────
+        if (_selectedPeriod == ProgressPeriod.day) ...[
+          _TodaySummaryCard(
+            repository: widget.repository,
+            todayActivities: todayActivities,
+          ),
+          const SizedBox(height: 10),
+        ],
+
+        // ── 6. Monthly Final Accuracy (Month View Only) ─────────────────────
         if (_selectedPeriod == ProgressPeriod.month && stats.monthlyAccuracy != null) ...[
           _MonthlyAccuracyCard(stats: stats),
           const SizedBox(height: 10),
@@ -589,3 +601,399 @@ class _MonthlyAccuracyCard extends StatelessWidget {
     );
   }
 }
+
+class _TodaySummaryCard extends StatelessWidget {
+  final ActivityRepository repository;
+  final List<Activity> todayActivities;
+
+  const _TodaySummaryCard({
+    required this.repository,
+    required this.todayActivities,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final summary = DailySummaryData.compute(
+      activities: todayActivities,
+      repository: repository,
+    );
+
+    final percent = summary.completionPercentage;
+    final progressColor = percent == 100
+        ? colors.completed
+        : percent > 0
+            ? colors.primary
+            : colors.secondary;
+
+    return Container(
+      key: const Key('todays_summary_card'),
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: colors.card,
+        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+        border: Border.all(
+          color: colors.border,
+          width: AppTheme.borderWidth,
+        ),
+        boxShadow: isDark ? null : AppTheme.lightCardShadow,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Header ───────────────────────────────────────────────
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                "Today's Summary",
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: colors.textMain,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: progressColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+                  border: Border.all(
+                    color: progressColor.withValues(alpha: 0.35),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  '${summary.completedCount}/${summary.totalCount} DONE',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: progressColor,
+                    letterSpacing: 0.4,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // ── Hero Completion Gauge ────────────────────────────────
+          Center(
+            child: Container(
+              width: 110,
+              height: 110,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: colors.barBackground,
+                border: Border.all(
+                  color: progressColor.withValues(alpha: 0.4),
+                  width: 3,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '$percent%',
+                    key: const Key('today_summary_completion_percent'),
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                      color: progressColor,
+                      height: 1.1,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Completion',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: colors.textSecondary,
+                      letterSpacing: 0.2,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // ── 4-Way Status Breakdown ───────────────────────────────
+          Row(
+            children: [
+              Expanded(
+                child: _SummaryStatusItem(
+                  icon: '✓',
+                  label: 'Completed',
+                  count: summary.completedCount,
+                  color: colors.completed,
+                  bgColor: colors.highlight,
+                  countKey: const Key('today_summary_completed_count'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _SummaryStatusItem(
+                  icon: '↗',
+                  label: 'Partial',
+                  count: summary.partialCount,
+                  color: colors.primary,
+                  bgColor: colors.barBackground,
+                  countKey: const Key('today_summary_partial_count'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: _SummaryStatusItem(
+                  icon: '—',
+                  label: 'Skipped',
+                  count: summary.skippedCount,
+                  color: colors.skipped,
+                  bgColor: isDark ? colors.card : const Color(0xFFEDF4F7),
+                  countKey: const Key('today_summary_skipped_count'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _SummaryStatusItem(
+                  icon: '×',
+                  label: 'Missed',
+                  count: summary.missedCount,
+                  color: colors.missed,
+                  bgColor: isDark ? colors.card : const Color(0xFFFDF0ED),
+                  countKey: const Key('today_summary_missed_count'),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // ── Total Active Time ────────────────────────────────────
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: colors.barBackground,
+              borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+              border: Border.all(
+                color: colors.border,
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.timer_outlined,
+                      size: 16,
+                      color: colors.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Total active time',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+                Text(
+                  summary.formattedActiveTime,
+                  key: const Key('today_summary_active_time'),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: colors.textMain,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // ── Activities Breakdown ─────────────────────────────────
+          Text(
+            'Activities',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: colors.textMain,
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (summary.items.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Text(
+                'No enabled activities today.',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: colors.textSecondary,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            )
+          else
+            ...summary.items.map(
+              (item) => _SummaryActivityRow(item: item),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryStatusItem extends StatelessWidget {
+  final String icon;
+  final String label;
+  final int count;
+  final Color color;
+  final Color bgColor;
+  final Key? countKey;
+
+  const _SummaryStatusItem({
+    required this.icon,
+    required this.label,
+    required this.count,
+    required this.color,
+    required this.bgColor,
+    this.countKey,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+        border: Border.all(
+          color: color.withValues(alpha: 0.25),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            '$icon $label',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: color,
+            ),
+          ),
+          Text(
+            '$count',
+            key: countKey,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SummaryActivityRow extends StatelessWidget {
+  final DailySummaryItem item;
+
+  const _SummaryActivityRow({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+
+    Color statusColor;
+    switch (item.status) {
+      case ActivityRecordStatus.completed:
+        statusColor = colors.completed;
+        break;
+      case ActivityRecordStatus.partial:
+        statusColor = colors.primary;
+        break;
+      case ActivityRecordStatus.skipped:
+        statusColor = colors.skipped;
+        break;
+      case ActivityRecordStatus.missed:
+      default:
+        statusColor = colors.missed;
+        break;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 5.0),
+      child: Row(
+        children: [
+          Container(
+            width: 28,
+            height: 28,
+            decoration: BoxDecoration(
+              color: colors.barBackground,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: colors.border,
+                width: 1,
+              ),
+            ),
+            child: Icon(
+              item.activity.activityType.icon,
+              size: 14,
+              color: item.status == ActivityRecordStatus.completed
+                  ? colors.completed
+                  : item.status == ActivityRecordStatus.partial
+                      ? colors.primary
+                      : colors.textSecondary,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              item.activity.name,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: colors.textMain,
+              ),
+            ),
+          ),
+          Text(
+            item.metricLabel,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+              color: colors.textSecondary,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Container(
+            width: 38,
+            alignment: Alignment.centerRight,
+            child: Text(
+              item.progressLabel,
+              style: TextStyle(
+                fontSize: item.status == ActivityRecordStatus.partial ? 12 : 14,
+                fontWeight: FontWeight.w700,
+                color: statusColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

@@ -99,7 +99,7 @@ void main() {
       // Verify workout metrics
       expect(find.text('Workout Metrics'), findsOneWidget);
       expect(find.text('Total Workout Duration'), findsOneWidget);
-      expect(find.text('10 min'), findsOneWidget);
+      expect(find.text('10 min'), findsWidgets);
       expect(find.text('Dumbbell Sets Completed'), findsOneWidget);
       expect(find.text('2 sets'), findsOneWidget);
       expect(find.text('Dumbbell Reps Completed'), findsOneWidget);
@@ -212,8 +212,8 @@ void main() {
         ),
       );
 
-      expect(find.text('0%'), findsOneWidget);
-      expect(find.text('0 min'), findsOneWidget);
+      expect(find.text('0%'), findsWidgets);
+      expect(find.text('0 min'), findsWidgets);
       expect(find.text('0 sets'), findsOneWidget);
       expect(find.text('0 reps'), findsOneWidget);
     });

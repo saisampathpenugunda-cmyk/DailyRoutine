@@ -4,6 +4,8 @@ import 'screens/home_screen.dart';
 import 'repositories/shared_preferences_activity_repository.dart';
 import 'theme/app_theme.dart';
 import 'services/notification_service.dart';
+import 'controllers/user_profile_controller.dart';
+import 'controllers/streak_controller.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -14,11 +16,15 @@ void main() async {
     notificationService: notificationService,
   );
   final themeController = await ThemeController.init();
+  final userProfileController = await UserProfileController.init();
+  final streakController = await StreakController.init(repository: activityRepository);
 
   runApp(DailyRoutineApp(
     repository: activityRepository,
     notificationService: notificationService,
     themeController: themeController,
+    userProfileController: userProfileController,
+    streakController: streakController,
   ));
 }
 
@@ -26,12 +32,16 @@ class DailyRoutineApp extends StatefulWidget {
   final ActivityRepository repository;
   final NotificationService? notificationService;
   final ThemeController? themeController;
+  final UserProfileController? userProfileController;
+  final StreakController? streakController;
 
   const DailyRoutineApp({
     super.key,
     required this.repository,
     this.notificationService,
     this.themeController,
+    this.userProfileController,
+    this.streakController,
   });
 
   @override
@@ -40,11 +50,16 @@ class DailyRoutineApp extends StatefulWidget {
 
 class _DailyRoutineAppState extends State<DailyRoutineApp> with WidgetsBindingObserver {
   late final ThemeController _themeController;
+  late final UserProfileController _userProfileController;
+  late final StreakController _streakController;
 
   @override
   void initState() {
     super.initState();
     _themeController = widget.themeController ?? ThemeController(ThemeMode.light);
+    _userProfileController = widget.userProfileController ?? UserProfileController();
+    _streakController = widget.streakController ??
+        StreakController(repository: widget.repository);
     WidgetsBinding.instance.addObserver(this);
   }
 
@@ -54,6 +69,12 @@ class _DailyRoutineAppState extends State<DailyRoutineApp> with WidgetsBindingOb
     if (widget.themeController == null) {
       _themeController.dispose();
     }
+    if (widget.userProfileController == null) {
+      _userProfileController.dispose();
+    }
+    if (widget.streakController == null) {
+      _streakController.dispose();
+    }
     super.dispose();
   }
 
@@ -61,8 +82,10 @@ class _DailyRoutineAppState extends State<DailyRoutineApp> with WidgetsBindingOb
   void didChangeAppLifecycleState(AppLifecycleState state) async {
     if (state == AppLifecycleState.resumed) {
       await widget.repository.checkDateRollover();
+      _streakController.recalculate();
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
       await widget.repository.checkDateRollover();
+      _streakController.recalculate();
       await widget.repository.flush();
     }
   }
@@ -83,6 +106,8 @@ class _DailyRoutineAppState extends State<DailyRoutineApp> with WidgetsBindingOb
             home: HomeScreen(
               repository: widget.repository,
               notificationService: widget.notificationService,
+              userProfileController: _userProfileController,
+              streakController: _streakController,
             ),
           );
         },

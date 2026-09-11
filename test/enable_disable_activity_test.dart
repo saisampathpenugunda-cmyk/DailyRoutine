@@ -331,7 +331,7 @@ void main() {
       expect(toggledVal, isTrue);
     });
 
-    testWidgets('HomeScreen renders disabled activities under Disabled Activities section', (tester) async {
+    testWidgets('HomeScreen does not render disabled activities on Home', (tester) async {
       final repo = InMemoryActivityRepository();
       repo.setActivityEnabled('meditation', false);
 
@@ -344,16 +344,23 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Disabled Activities'), findsOneWidget);
-      expect(find.text('Meditation'), findsOneWidget);
+      expect(find.text('Disabled Activities'), findsNothing);
+      expect(find.text('Meditation'), findsNothing);
       expect(find.text('Walking'), findsOneWidget);
       expect(find.text('Dumbbells'), findsOneWidget);
 
-      // Tapping switch re-enables meditation
-      await tester.tap(find.byKey(const ValueKey('toggle_enabled_meditation')));
+      // Re-enabling meditation brings it back to Home
+      repo.setActivityEnabled('meditation', true);
+      await tester.pumpWidget(
+        MaterialApp(
+          home: HomeScreen(
+            repository: repo,
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
-      // Meditation should now be back in Today's Plan and Disabled Activities section should be gone
+      expect(find.text('Meditation'), findsOneWidget);
       expect(find.text('Disabled Activities'), findsNothing);
     });
 
@@ -375,7 +382,7 @@ void main() {
       expect(find.text('All activities are disabled'), findsOneWidget);
       expect(find.text('0 of 0 activities completed'), findsOneWidget);
       expect(find.text('0% Done'), findsOneWidget);
-      expect(find.text('Disabled Activities'), findsOneWidget);
+      expect(find.text('Disabled Activities'), findsNothing);
     });
 
     testWidgets('Detail screens display Enable/Disable switch in AppBar', (tester) async {

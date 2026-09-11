@@ -440,13 +440,32 @@ class ThemeController extends ValueNotifier<ThemeMode> {
   void setThemeMode(ThemeMode mode) {
     if (value == mode) return;
     value = mode;
-    _prefs?.setString(themeModeKey, mode == ThemeMode.dark ? 'dark' : 'light');
+    final String modeString;
+    switch (mode) {
+      case ThemeMode.dark:
+        modeString = 'dark';
+        break;
+      case ThemeMode.light:
+        modeString = 'light';
+        break;
+      case ThemeMode.system:
+        modeString = 'system';
+        break;
+    }
+    _prefs?.setString(themeModeKey, modeString);
   }
 
   static Future<ThemeController> init([SharedPreferences? prefs]) async {
     final effectivePrefs = prefs ?? await SharedPreferences.getInstance();
     final saved = effectivePrefs.getString(themeModeKey);
-    final mode = saved == 'dark' ? ThemeMode.dark : ThemeMode.light;
+    final ThemeMode mode;
+    if (saved == 'dark') {
+      mode = ThemeMode.dark;
+    } else if (saved == 'system') {
+      mode = ThemeMode.system;
+    } else {
+      mode = ThemeMode.light;
+    }
     return ThemeController(mode, effectivePrefs);
   }
 }

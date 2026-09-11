@@ -87,7 +87,9 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
     // Preserve underlying specific built-in engine type if built-in
     ActivityType finalType;
     if (widget.activity.isBuiltIn) {
-      if (_selectedType == ActivityType.workout) {
+      if (widget.activity.id == 'guitar' || widget.activity.activityType == ActivityType.guitar) {
+        finalType = ActivityType.guitar;
+      } else if (_selectedType == ActivityType.workout) {
         finalType = ActivityType.dumbbells;
       } else {
         finalType = widget.activity.activityType == ActivityType.walking
@@ -98,11 +100,12 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
       finalType = _selectedType;
     }
 
+    final isEnabled = widget.activity.id == 'guitar' ? true : _isEnabled;
     final updatedActivity = widget.activity.copyWith(
       name: _nameController.text.trim(),
       activityType: finalType,
       defaultDuration: _duration,
-      isEnabled: _isEnabled,
+      isEnabled: isEnabled,
     );
 
     widget.repository.updateActivity(updatedActivity);
@@ -123,6 +126,15 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
   }
 
   Future<void> _handleDelete() async {
+    if (widget.activity.id == 'guitar') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Guitar is a permanent built-in activity and cannot be deleted.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     if (widget.repository.isActivityInProgress(widget.activity.id)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -458,7 +470,7 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
                           child: Switch(
                             key: const Key('edit_enabled_switch'),
                             value: _isEnabled,
-                            onChanged: _inProgress
+                            onChanged: (_inProgress || widget.activity.id == 'guitar')
                                 ? null
                                 : (val) {
                                     setState(() => _isEnabled = val);
@@ -520,27 +532,29 @@ class _EditActivityScreenState extends State<EditActivityScreen> {
                 ),
 
                 // ── Delete Button ──────────────────────────────────────────
-                const SizedBox(height: 16),
-                OutlinedButton.icon(
-                  key: const Key('edit_delete_button'),
-                  icon: Icon(Icons.delete_outline, color: errorColor, size: 20),
-                  label: Text(
-                    'Delete Activity',
-                    style: TextStyle(
-                      color: errorColor,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+                if (widget.activity.id != 'guitar') ...[
+                  const SizedBox(height: 16),
+                  OutlinedButton.icon(
+                    key: const Key('edit_delete_button'),
+                    icon: Icon(Icons.delete_outline, color: errorColor, size: 20),
+                    label: Text(
+                      'Delete Activity',
+                      style: TextStyle(
+                        color: errorColor,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    side: BorderSide(color: errorColor.withValues(alpha: 0.5), width: 1),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: BorderSide(color: errorColor.withValues(alpha: 0.5), width: 1),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+                      ),
                     ),
+                    onPressed: _handleDelete,
                   ),
-                  onPressed: _handleDelete,
-                ),
+                ],
                 const SizedBox(height: 24),
               ],
             ),

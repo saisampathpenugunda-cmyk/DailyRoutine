@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/activity.dart';
 import '../repositories/activity_repository.dart';
@@ -7,22 +8,48 @@ import 'activity_detail_screen.dart';
 import 'meditation_screen.dart';
 import 'walking_screen.dart';
 import 'dumbbells_screen.dart';
+import 'guitar_screen.dart';
 import 'history_screen.dart';
 import 'progress_screen.dart';
 import 'reminder_settings_screen.dart';
 import 'create_activity_screen.dart';
 import 'manage_activities_screen.dart';
+import 'settings_screen.dart';
 import '../services/notification_service.dart';
+import '../controllers/user_profile_controller.dart';
+import '../controllers/streak_controller.dart';
 
 class HomeScreen extends StatefulWidget {
   final ActivityRepository repository;
   final NotificationService? notificationService;
+  final UserProfileController? userProfileController;
+  final StreakController? streakController;
+  final DateTime? currentTime;
 
   const HomeScreen({
     super.key,
     required this.repository,
     this.notificationService,
+    this.userProfileController,
+    this.streakController,
+    this.currentTime,
   });
+
+  static String getTimeBasedGreeting(String name, {DateTime? time}) {
+    final now = time ?? DateTime.now();
+    final hour = now.hour;
+    final String greeting;
+    if (hour >= 5 && hour < 12) {
+      greeting = 'Good Morning';
+    } else if (hour >= 12 && hour < 17) {
+      greeting = 'Good Afternoon';
+    } else if (hour >= 17 && hour < 21) {
+      greeting = 'Good Evening';
+    } else {
+      greeting = 'Good Night';
+    }
+    return '$greeting, $name!';
+  }
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -30,20 +57,72 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late List<Activity> _activities;
+  late UserProfileController _userProfileController;
+  late StreakController _streakController;
   int _currentTabIndex = 0;
   Key _historyKey = UniqueKey();
   Key _progressKey = UniqueKey();
+  Timer? _greetingRefreshTimer;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _userProfileController = widget.userProfileController ?? UserProfileController();
+    _userProfileController.addListener(_onUserProfileChanged);
+    _streakController = widget.streakController ??
+        StreakController(repository: widget.repository);
+    _streakController.addListener(_onStreakChanged);
+    _streakController.recalculate();
     _activities = widget.repository.getActivities();
     _checkRolloverAndRefresh();
+    _startGreetingTimer();
+  }
+
+  void _startGreetingTimer() {
+    _greetingRefreshTimer?.cancel();
+    _greetingRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) {
+        setState(() {});
+      }
+    });
+  }
+
+  void _onUserProfileChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _onStreakChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  void didUpdateWidget(HomeScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.userProfileController != widget.userProfileController) {
+      _userProfileController.removeListener(_onUserProfileChanged);
+      _userProfileController = widget.userProfileController ?? UserProfileController();
+      _userProfileController.addListener(_onUserProfileChanged);
+    }
+    if (oldWidget.streakController != widget.streakController) {
+      _streakController.removeListener(_onStreakChanged);
+      _streakController = widget.streakController ??
+          StreakController(repository: widget.repository);
+      _streakController.addListener(_onStreakChanged);
+    }
+    _streakController.recalculate();
+    _activities = widget.repository.getActivities();
   }
 
   @override
   void dispose() {
+    _greetingRefreshTimer?.cancel();
+    _userProfileController.removeListener(_onUserProfileChanged);
+    _streakController.removeListener(_onStreakChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -51,12 +130,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) async {
     if (state == AppLifecycleState.resumed) {
+      _startGreetingTimer();
       await _checkRolloverAndRefresh();
+      if (mounted) {
+        setState(() {});
+      }
+    } else if (state == AppLifecycleState.paused) {
+      _greetingRefreshTimer?.cancel();
     }
   }
 
   Future<void> _checkRolloverAndRefresh() async {
     final rolledOver = await widget.repository.checkDateRollover();
+    _streakController.recalculate();
     if (!mounted) return;
     setState(() {
       if (rolledOver) {
@@ -68,6 +154,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _loadActivities() {
+    _streakController.recalculate();
     setState(() {
       _activities = widget.repository.getActivities();
     });
@@ -96,6 +183,15 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _toggleActivityEnabled(String id, bool enabled) {
+    if (id == 'guitar' && !enabled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Guitar is a permanent built-in activity and cannot be disabled.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     final success = widget.repository.setActivityEnabled(id, enabled);
     if (!success) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -137,6 +233,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         ),
       );
+    } else if (activity.activityType == ActivityType.guitar ||
+        activity.id == 'guitar' ||
+        activity.name.trim().toLowerCase() == 'guitar') {
+      await Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (context) => GuitarScreen(
+            activity: activity,
+            repository: widget.repository,
+          ),
+        ),
+      );
     } else {
       await Navigator.of(context).push(
         MaterialPageRoute<void>(
@@ -171,7 +278,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final isDark = themeController.isDarkMode;
 
     final enabledActivities = _activities.where((a) => a.isEnabled).toList();
-    final disabledActivities = _activities.where((a) => !a.isEnabled).toList();
     final completedCount = enabledActivities.where((a) => a.isCompleted).length;
     final totalCount = enabledActivities.length;
     final progress = totalCount > 0 ? completedCount / totalCount : 0.0;
@@ -243,316 +349,158 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 _loadActivities();
               },
             ),
+            IconButton(
+              key: const Key('settings_button'),
+              icon: Icon(
+                Icons.settings_outlined,
+                color: colors.textMain,
+              ),
+              tooltip: 'Settings',
+              onPressed: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (context) => SettingsScreen(
+                      repository: widget.repository,
+                      notificationService: widget.notificationService,
+                      userProfileController: _userProfileController,
+                    ),
+                  ),
+                );
+                await _checkRolloverAndRefresh();
+              },
+            ),
           ],
         ],
       ),
       body: _currentTabIndex == 0
-          ? ListView(
-              padding: const EdgeInsets.symmetric(vertical: 4.0),
-              children: [
-                // ── Greeting Header (matching reference image) ─────────────────
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20.0, 4.0, 20.0, 4.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Good Morning,',
+          ? (enabledActivities.isEmpty
+              ? ListView(
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  children: [
+                    _buildHomeHero(context, colors, isDark, completedCount, totalCount, progress, isAllDone),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(20.0, 10.0, 20.0, 4.0),
+                      child: Text(
+                        'Your Activities',
                         style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
                           color: colors.textMain,
-                          letterSpacing: -0.3,
+                          letterSpacing: -0.2,
                         ),
                       ),
-                      const SizedBox(height: 1),
-                      Text(
-                        _getFormattedDate(),
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: colors.textSecondary,
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
+                        decoration: BoxDecoration(
+                          color: colors.card,
+                          borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+                          border: Border.all(color: colors.border, width: AppTheme.borderWidth),
+                          boxShadow: isDark ? null : AppTheme.lightCardShadow,
+                        ),
+                        child: Column(
+                          children: [
+                            Icon(
+                              _activities.isEmpty
+                                  ? Icons.playlist_add_rounded
+                                  : Icons.pause_circle_outline_rounded,
+                              size: 40,
+                              color: colors.secondary,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              _activities.isEmpty
+                                  ? 'No activities yet'
+                                  : 'All activities are disabled',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: colors.textMain,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              _activities.isEmpty
+                                  ? 'Tap the + button below to create your first activity'
+                                  : 'Enable an activity in Manage Activities to include it in Today\'s Plan',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                )
+              : ReorderableListView(
+                  buildDefaultDragHandles: false,
+                  padding: const EdgeInsets.symmetric(vertical: 4.0),
+                  onReorder: (oldIndex, newIndex) {
+                    widget.repository.reorderEnabledActivities(oldIndex, newIndex);
+                    _loadActivities();
+                  },
+                  proxyDecorator: (Widget child, int index, Animation<double> animation) {
+                    return AnimatedBuilder(
+                      animation: animation,
+                      builder: (BuildContext context, Widget? animChild) {
+                        return Container(
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+                            boxShadow: [
+                              BoxShadow(
+                                color: colors.primary.withValues(alpha: 0.25),
+                                blurRadius: 18 * animation.value,
+                                spreadRadius: 2 * animation.value,
+                                offset: Offset(0, 6 * animation.value),
+                              ),
+                            ],
+                          ),
+                          child: animChild,
+                        );
+                      },
+                      child: child,
+                    );
+                  },
+                  header: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHomeHero(context, colors, isDark, completedCount, totalCount, progress, isAllDone),
+                      Padding(
+                        padding: const EdgeInsets.fromLTRB(20.0, 4.0, 20.0, 2.0),
+                        child: Text(
+                          'Your Activities',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
+                            color: colors.textMain,
+                            letterSpacing: -0.2,
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-                // ── Today's Plan Hero Card with Circular Completion Ring ───────
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-                    decoration: BoxDecoration(
-                      color: colors.card,
-                      borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-                      border: Border.all(
-                        color: isAllDone
-                            ? colors.completed.withValues(alpha: 0.35)
-                            : colors.border,
-                        width: AppTheme.borderWidth,
-                      ),
-                      boxShadow: isDark ? null : AppTheme.lightCardShadow,
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                "Today's Plan",
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 16,
-                                  color: colors.textMain,
-                                  letterSpacing: -0.2,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                '$completedCount of $totalCount activities completed',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w500,
-                                  color: colors.textSecondary,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
-                                decoration: BoxDecoration(
-                                  color: (isAllDone ? colors.completed : colors.primary)
-                                      .withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
-                                  border: Border.all(
-                                    color: (isAllDone ? colors.completed : colors.primary)
-                                        .withValues(alpha: 0.3),
-                                    width: 1,
-                                  ),
-                                ),
-                                child: Text(
-                                  isAllDone ? '100% Done' : '${(progress * 100).toInt()}% Done',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w700,
-                                    color: isAllDone ? colors.completed : colors.primary,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
+                  children: [
+                    for (int i = 0; i < enabledActivities.length; i++)
+                      ReorderableDelayedDragStartListener(
+                        key: ValueKey(enabledActivities[i].id),
+                        index: i,
+                        child: ActivityCard(
+                          key: ValueKey('activity_card_${enabledActivities[i].id}'),
+                          activity: enabledActivities[i],
+                          progress: widget.repository.getActivityProgress(enabledActivities[i]),
+                          onTap: () => _navigateToDetail(enabledActivities[i]),
+                          onToggleCompletion: (_) => _toggleActivityCompletion(enabledActivities[i].id),
+                          onToggleEnabled: (enabled) => _toggleActivityEnabled(enabledActivities[i].id, enabled),
                         ),
-                        const SizedBox(width: 14),
-                        // Circular progress ring matching reference with safe text containment
-                        SizedBox(
-                          width: 66,
-                          height: 66,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              SizedBox.expand(
-                                child: CircularProgressIndicator(
-                                  value: progress,
-                                  strokeWidth: 5.0,
-                                  backgroundColor: colors.barBackground,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    isAllDone ? colors.completed : colors.primary,
-                                  ),
-                                ),
-                              ),
-                              Center(
-                                child: Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    child: Column(
-                                      mainAxisSize: MainAxisSize.min,
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      crossAxisAlignment: CrossAxisAlignment.center,
-                                      children: [
-                                        Text(
-                                          '${(progress * 100).toInt()}%',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w800,
-                                            color: colors.textMain,
-                                            letterSpacing: -0.3,
-                                            height: 1.1,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 1.5),
-                                        Text(
-                                          'Complete',
-                                          style: TextStyle(
-                                            fontSize: 8.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: colors.textSecondary,
-                                            letterSpacing: 0.1,
-                                            height: 1.1,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20.0, 10.0, 20.0, 4.0),
-                  child: Text(
-                    'Your Activities',
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: colors.textMain,
-                      letterSpacing: -0.2,
-                    ),
-                  ),
-                ),
-                if (_activities.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
-                      decoration: BoxDecoration(
-                        color: colors.card,
-                        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-                        border: Border.all(color: colors.border, width: AppTheme.borderWidth),
-                        boxShadow: isDark ? null : AppTheme.lightCardShadow,
                       ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.playlist_add_rounded,
-                            size: 40,
-                            color: colors.secondary,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'No activities yet',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: colors.textMain,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Tap the + button below to create your first activity',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: colors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                else if (enabledActivities.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
-                      decoration: BoxDecoration(
-                        color: colors.card,
-                        borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
-                        border: Border.all(color: colors.border, width: AppTheme.borderWidth),
-                        boxShadow: isDark ? null : AppTheme.lightCardShadow,
-                      ),
-                      child: Column(
-                        children: [
-                          Icon(
-                            Icons.pause_circle_outline_rounded,
-                            size: 40,
-                            color: colors.secondary,
-                          ),
-                          const SizedBox(height: 10),
-                          Text(
-                            'All activities are disabled',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: colors.textMain,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Enable an activity below to include it in Today\'s Plan',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              color: colors.textSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  )
-                else
-                  ...enabledActivities.map(
-                    (activity) => ActivityCard(
-                      key: ValueKey(activity.id),
-                      activity: activity,
-                      progress: widget.repository.getActivityProgress(activity),
-                      onTap: () => _navigateToDetail(activity),
-                      onToggleCompletion: (_) => _toggleActivityCompletion(activity.id),
-                      onToggleEnabled: (enabled) => _toggleActivityEnabled(activity.id, enabled),
-                    ),
-                  ),
-                if (disabledActivities.isNotEmpty) ...[
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(20.0, 16.0, 20.0, 4.0),
-                    child: Row(
-                      children: [
-                        Text(
-                          'Disabled Activities',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                            color: colors.textSecondary,
-                            letterSpacing: -0.2,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: colors.secondary.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            '${disabledActivities.length}',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: colors.secondary,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  ...disabledActivities.map(
-                    (activity) => ActivityCard(
-                      key: ValueKey(activity.id),
-                      activity: activity,
-                      progress: 0.0,
-                      onTap: () => _navigateToDetail(activity),
-                      onToggleEnabled: (enabled) => _toggleActivityEnabled(activity.id, enabled),
-                    ),
-                  ),
-                ],
-              ],
-            )
+                  ],
+                ))
           : _currentTabIndex == 1
               ? HistoryScreen(
                   key: _historyKey,
@@ -626,5 +574,234 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     const weekDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return '${weekDays[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}, ${now.year}';
+  }
+
+  Widget _buildHomeHero(
+    BuildContext context,
+    AppThemeColors colors,
+    bool isDark,
+    int completedCount,
+    int totalCount,
+    double progress,
+    bool isAllDone,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── Greeting Header (matching reference image) ─────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20.0, 2.0, 20.0, 2.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                HomeScreen.getTimeBasedGreeting(
+                  _userProfileController.userName,
+                  time: widget.currentTime,
+                ),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: colors.textMain,
+                  letterSpacing: -0.3,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(
+                _getFormattedDate(),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: colors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        // ── Compact Streak Card ─────────────────────────────────────────
+        _buildStreakCard(context, colors, isDark),
+        // ── Today's Plan Hero Card with Circular Completion Ring ───────
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 2.0),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            decoration: BoxDecoration(
+              color: colors.card,
+              borderRadius: BorderRadius.circular(AppTheme.radiusLarge),
+              border: Border.all(
+                color: isAllDone
+                    ? colors.completed.withValues(alpha: 0.35)
+                    : colors.border,
+                width: AppTheme.borderWidth,
+              ),
+              boxShadow: isDark ? null : AppTheme.lightCardShadow,
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "Today's Plan",
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          color: colors.textMain,
+                          letterSpacing: -0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        '$completedCount of $totalCount activities completed',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: colors.textSecondary,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2.5),
+                        decoration: BoxDecoration(
+                          color: (isAllDone ? colors.completed : colors.primary)
+                              .withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(AppTheme.radiusSmall),
+                          border: Border.all(
+                            color: (isAllDone ? colors.completed : colors.primary)
+                                .withValues(alpha: 0.3),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          isAllDone ? '100% Done' : '${(progress * 100).toInt()}% Done',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: isAllDone ? colors.completed : colors.primary,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 14),
+                // Circular progress ring matching reference with safe text containment
+                SizedBox(
+                  width: 66,
+                  height: 66,
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      SizedBox.expand(
+                        child: CircularProgressIndicator(
+                          value: progress,
+                          strokeWidth: 5.0,
+                          backgroundColor: colors.barBackground,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            isAllDone ? colors.completed : colors.primary,
+                          ),
+                        ),
+                      ),
+                      Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Text(
+                                  '${(progress * 100).toInt()}%',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: colors.textMain,
+                                    letterSpacing: -0.3,
+                                    height: 1.1,
+                                  ),
+                                ),
+                                const SizedBox(height: 1.5),
+                                Text(
+                                  'Complete',
+                                  style: TextStyle(
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w600,
+                                    color: colors.textSecondary,
+                                    letterSpacing: 0.1,
+                                    height: 1.1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStreakCard(
+    BuildContext context,
+    AppThemeColors colors,
+    bool isDark,
+  ) {
+    final currentStreak = _streakController.currentStreak;
+    final bestStreak = _streakController.bestStreak;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 2.0),
+      child: Container(
+        key: const Key('streak_card'),
+        padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 6.0),
+        decoration: BoxDecoration(
+          color: colors.card,
+          borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
+          border: Border.all(color: colors.border, width: AppTheme.borderWidth),
+          boxShadow: isDark ? null : AppTheme.lightCardShadow,
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '🔥 $currentStreak Day Streak',
+                    key: const Key('current_streak_text'),
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: colors.textMain,
+                      letterSpacing: -0.2,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    'Best: $bestStreak ${bestStreak == 1 ? 'day' : 'days'}',
+                    key: const Key('best_streak_text'),
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: colors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

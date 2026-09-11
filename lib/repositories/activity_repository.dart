@@ -30,10 +30,15 @@ abstract class ActivityRepository {
   bool isActivityInProgress(String activityId);
   bool setActivityEnabled(String activityId, bool isEnabled);
   bool deleteActivity(String activityId);
+
+  List<String> getEnabledActivityOrder();
+  void reorderEnabledActivities(int oldIndex, int newIndex);
+  void updateEnabledActivityOrder(List<String> orderedIds);
 }
 
 class InMemoryActivityRepository implements ActivityRepository {
   late final List<Activity> _activities;
+  final List<String> _enabledOrder = [];
   final List<DayHistory> _history = [];
   final Map<String, ReminderConfig> _reminderConfigs = {};
   final Map<String, RoutineTimerController> _timerControllers = {};
@@ -93,9 +98,44 @@ class InMemoryActivityRepository implements ActivityRepository {
         ];
 
     _initFirstTrackedDate();
+    _initEnabledOrder();
     if (autoCreateTodayHistory) {
       _ensureDailyRecords(_lastDateKey!, _clock());
     }
+  }
+
+  void _initEnabledOrder() {
+    _enabledOrder.clear();
+    for (final a in _activities) {
+      if (a.isEnabled) {
+        _enabledOrder.add(a.id);
+      }
+    }
+    _sortActivitiesByOrder();
+  }
+
+  void _sortActivitiesByOrder() {
+    final originalIndices = {
+      for (int i = 0; i < _activities.length; i++) _activities[i].id: i,
+    };
+    final enabledMap = {
+      for (int i = 0; i < _enabledOrder.length; i++) _enabledOrder[i]: i,
+    };
+    _activities.sort((a, b) {
+      if (a.isEnabled && b.isEnabled) {
+        final orderA = enabledMap[a.id] ?? 999999;
+        final orderB = enabledMap[b.id] ?? 999999;
+        final cmp = orderA.compareTo(orderB);
+        if (cmp != 0) return cmp;
+        return (originalIndices[a.id] ?? 0).compareTo(originalIndices[b.id] ?? 0);
+      } else if (a.isEnabled && !b.isEnabled) {
+        return -1;
+      } else if (!a.isEnabled && b.isEnabled) {
+        return 1;
+      } else {
+        return (originalIndices[a.id] ?? 0).compareTo(originalIndices[b.id] ?? 0);
+      }
+    });
   }
 
   @override
@@ -177,6 +217,13 @@ class InMemoryActivityRepository implements ActivityRepository {
     } else {
       _activities.add(activity);
     }
+    if (activity.isEnabled) {
+      _enabledOrder.remove(activity.id);
+      _enabledOrder.add(activity.id);
+    } else {
+      _enabledOrder.remove(activity.id);
+    }
+    _sortActivitiesByOrder();
     _syncTodayHistory();
   }
 
@@ -184,7 +231,16 @@ class InMemoryActivityRepository implements ActivityRepository {
   void updateActivity(Activity activity) {
     final index = _activities.indexWhere((a) => a.id == activity.id);
     if (index != -1) {
+      final oldActivity = _activities[index];
       _activities[index] = activity;
+
+      if (!oldActivity.isEnabled && activity.isEnabled) {
+        _enabledOrder.remove(activity.id);
+        _enabledOrder.add(activity.id);
+      } else if (oldActivity.isEnabled && !activity.isEnabled) {
+        _enabledOrder.remove(activity.id);
+      }
+      _sortActivitiesByOrder();
 
       // If timer is unstarted (initial), update duration immediately.
       // If timer is running or paused, leave the current session untouched.
@@ -233,6 +289,9 @@ class InMemoryActivityRepository implements ActivityRepository {
 
   @override
   bool setActivityEnabled(String activityId, bool isEnabled) {
+    if (activityId == 'guitar' && !isEnabled) {
+      return false;
+    }
     if (!isEnabled && isActivityInProgress(activityId)) {
       return false;
     }
@@ -247,8 +306,11 @@ class InMemoryActivityRepository implements ActivityRepository {
     _activities[index] = updated;
 
     if (!isEnabled) {
+      _enabledOrder.remove(activityId);
       notificationService?.cancelActivityReminders(activityId);
     } else {
+      _enabledOrder.remove(activityId);
+      _enabledOrder.add(activityId);
       final config = getReminderConfig(activityId);
       if (config.hasAnyReminder && !updated.isCompleted && !updated.isSkipped) {
         notificationService?.scheduleActivityReminders(
@@ -259,6 +321,7 @@ class InMemoryActivityRepository implements ActivityRepository {
       }
     }
 
+    _sortActivitiesByOrder();
     _syncTodayHistory();
     return true;
   }
@@ -281,16 +344,57 @@ class InMemoryActivityRepository implements ActivityRepository {
 
   @override
   bool deleteActivity(String activityId) {
+    if (activityId == 'guitar') return false;
     final activity = getActivityById(activityId);
     if (activity == null) return false;
     if (isActivityInProgress(activityId)) return false;
 
     _activities.removeWhere((a) => a.id == activityId);
+    _enabledOrder.remove(activityId);
     _reminderConfigs.remove(activityId);
     _timerControllers.remove(activityId);
     notificationService?.cancelActivityReminders(activityId);
+    _sortActivitiesByOrder();
     _syncTodayHistory();
     return true;
+  }
+
+  @override
+  List<String> getEnabledActivityOrder() {
+    return List.unmodifiable(_enabledOrder);
+  }
+
+  @override
+  void reorderEnabledActivities(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= _enabledOrder.length) return;
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    if (newIndex < 0 || newIndex >= _enabledOrder.length) return;
+    if (oldIndex == newIndex) return;
+
+    final id = _enabledOrder.removeAt(oldIndex);
+    _enabledOrder.insert(newIndex, id);
+    _sortActivitiesByOrder();
+  }
+
+  @override
+  void updateEnabledActivityOrder(List<String> orderedIds) {
+    final validEnabled = _activities.where((a) => a.isEnabled).map((a) => a.id).toSet();
+    final newOrder = <String>[];
+    for (final id in orderedIds) {
+      if (validEnabled.contains(id) && !newOrder.contains(id)) {
+        newOrder.add(id);
+      }
+    }
+    for (final act in _activities) {
+      if (act.isEnabled && !newOrder.contains(act.id)) {
+        newOrder.add(act.id);
+      }
+    }
+    _enabledOrder.clear();
+    _enabledOrder.addAll(newOrder);
+    _sortActivitiesByOrder();
   }
 
   @override

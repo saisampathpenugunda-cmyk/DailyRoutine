@@ -142,7 +142,11 @@ class Activity {
     return ActivityRecordStatus.pending;
   }
 
-  bool get isBuiltIn => id == 'meditation' || id == 'walking' || id == 'dumbbells';
+  bool get isBuiltIn =>
+      id == 'meditation' ||
+      id == 'walking' ||
+      id == 'dumbbells' ||
+      id == 'guitar';
 
   bool get isWorkout => activityType == ActivityType.workout || activityType == ActivityType.dumbbells;
 

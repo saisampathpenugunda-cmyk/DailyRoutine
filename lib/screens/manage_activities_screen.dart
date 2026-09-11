@@ -64,6 +64,17 @@ class _ManageActivitiesScreenState extends State<ManageActivitiesScreen> {
   }
 
   void _toggleActivityEnabled(Activity activity, bool enabled) {
+    if (activity.id == 'guitar' && !enabled) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Guitar is a permanent built-in activity and cannot be disabled.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final success = widget.repository.setActivityEnabled(activity.id, enabled);
     if (!success) {
       ScaffoldMessenger.of(context).clearSnackBars();
@@ -79,6 +90,16 @@ class _ManageActivitiesScreenState extends State<ManageActivitiesScreen> {
   }
 
   Future<void> _confirmDeleteActivity(Activity activity) async {
+    if (activity.id == 'guitar') {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Guitar is a permanent built-in activity and cannot be deleted.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     if (widget.repository.isActivityInProgress(activity.id)) {
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -222,7 +243,7 @@ class _ManageActivitiesScreenState extends State<ManageActivitiesScreen> {
                 isDark: isDark,
                 onToggleEnabled: (val) => _toggleActivityEnabled(activity, val),
                 onEdit: () => _openEditActivity(activity),
-                onDelete: () => _confirmDeleteActivity(activity),
+                onDelete: activity.id == 'guitar' ? null : () => _confirmDeleteActivity(activity),
               ),
               const SizedBox(height: 12),
             ],

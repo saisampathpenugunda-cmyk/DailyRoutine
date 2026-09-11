@@ -14,10 +14,11 @@ void main() {
       final repository = await SharedPreferencesActivityRepository.init();
       final activities = repository.getActivities();
       
-      expect(activities.length, 3);
+      expect(activities.length, 4);
       expect(activities[0].id, 'meditation');
       expect(activities[1].id, 'walking');
       expect(activities[2].id, 'dumbbells');
+      expect(activities[3].id, 'guitar');
     });
 
     test('Saves and loads completion persistence', () async {
@@ -89,7 +90,7 @@ void main() {
 
       final repo = SharedPreferencesActivityRepository(prefs);
       // Defaults loaded into memory to keep app operational
-      expect(repo.getActivities().length, 3);
+      expect(repo.getActivities().length, 4);
       // But the raw corrupted data was backed up
       expect(prefs.getString('activities_corrupted_backup'), corruptedJson);
     });
@@ -361,7 +362,7 @@ void main() {
       expect(history.length, 1);
       expect(history[0].dateKey, '2026-09-09');
       expect(history[0].completedCount, 0);
-      expect(history[0].totalCount, 3);
+      expect(history[0].totalCount, 4);
       expect(history[0].completionRate, 0.0);
     });
 
@@ -376,7 +377,7 @@ void main() {
       expect(history.length, 1);
       expect(history[0].dateKey, '2026-09-09');
       expect(history[0].completedCount, 1);
-      expect(history[0].completionRate, closeTo(1 / 3, 0.01));
+      expect(history[0].completionRate, closeTo(1 / 4, 0.01));
       expect(history[0].activities.firstWhere((a) => a.id == 'meditation').isCompleted, isTrue);
     });
 

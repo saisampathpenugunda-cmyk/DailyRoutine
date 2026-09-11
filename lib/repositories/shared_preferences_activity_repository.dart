@@ -16,10 +16,12 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
   static const String _corruptedBackupKey = 'activities_corrupted_backup';
   static const String _remindersKey = 'activity_reminders';
   static const String _timersKey = 'activity_timer_states';
+  static const String _enabledOrderKey = 'enabled_activity_order';
   
   final SharedPreferences _prefs;
   final NotificationService? notificationService;
   final List<Activity> _activities = [];
+  final List<String> _enabledOrder = [];
   final List<DayHistory> _history = [];
   final Map<String, ReminderConfig> _reminderConfigs = {};
   final Map<String, RoutineTimerController> _timerControllers = {};
@@ -61,9 +63,62 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
   void _loadAll() {
     _loadHistory();
     _loadActivities();
+    _loadEnabledOrder();
     _loadReminderConfigs();
     _loadTimerStates();
     checkDateRollover(now: _clock());
+  }
+
+  void _loadEnabledOrder() {
+    _enabledOrder.clear();
+    final List<String>? savedOrder = _prefs.getStringList(_enabledOrderKey);
+    final existingEnabledIds = _activities.where((a) => a.isEnabled).map((a) => a.id).toSet();
+
+    if (savedOrder != null && savedOrder.isNotEmpty) {
+      for (final id in savedOrder) {
+        if (existingEnabledIds.contains(id) && !_enabledOrder.contains(id)) {
+          _enabledOrder.add(id);
+        }
+      }
+    }
+    for (final act in _activities) {
+      if (act.isEnabled && !_enabledOrder.contains(act.id)) {
+        _enabledOrder.add(act.id);
+      }
+    }
+    _sortActivitiesByOrder();
+  }
+
+  Future<void> _saveEnabledOrder() async {
+    try {
+      await _prefs.setStringList(_enabledOrderKey, List<String>.from(_enabledOrder));
+    } catch (e) {
+      debugPrint('Error saving enabled activity order: $e');
+    }
+  }
+
+  void _sortActivitiesByOrder() {
+    final originalIndices = {
+      for (int i = 0; i < _activities.length; i++) _activities[i].id: i,
+    };
+    final enabledMap = {
+      for (int i = 0; i < _enabledOrder.length; i++) _enabledOrder[i]: i,
+    };
+    _activities.sort((a, b) {
+      if (a.isEnabled && b.isEnabled) {
+        final orderA = enabledMap[a.id] ?? 999999;
+        final orderB = enabledMap[b.id] ?? 999999;
+        final cmp = orderA.compareTo(orderB);
+        if (cmp != 0) return cmp;
+        return (originalIndices[a.id] ?? 0).compareTo(originalIndices[b.id] ?? 0);
+      } else if (a.isEnabled && !b.isEnabled) {
+        return -1;
+      } else if (!a.isEnabled && b.isEnabled) {
+        return 1;
+      } else {
+        return (originalIndices[a.id] ?? 0).compareTo(originalIndices[b.id] ?? 0);
+      }
+    });
   }
 
   void _loadTimerStates() {
@@ -189,6 +244,21 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
             }
           }
           if (decoded.isEmpty || loadedActivities.isNotEmpty) {
+            if (!loadedActivities.any((a) => a.id == 'guitar')) {
+              loadedActivities.add(const Activity(
+                id: 'guitar',
+                name: 'Guitar',
+                activityType: ActivityType.guitar,
+                defaultDuration: Duration(minutes: 15),
+                isEnabled: true,
+                isCompleted: false,
+              ));
+            } else {
+              final gIdx = loadedActivities.indexWhere((a) => a.id == 'guitar');
+              if (gIdx != -1 && !loadedActivities[gIdx].isEnabled) {
+                loadedActivities[gIdx] = loadedActivities[gIdx].copyWith(isEnabled: true);
+              }
+            }
             _activities.clear();
             _activities.addAll(loadedActivities);
             return;
@@ -445,7 +515,16 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
         activityType: ActivityType.dumbbells,
         defaultDuration: Duration(minutes: 20),
       ),
+      const Activity(
+        id: 'guitar',
+        name: 'Guitar',
+        activityType: ActivityType.guitar,
+        defaultDuration: Duration(minutes: 15),
+      ),
     ]);
+    _enabledOrder.clear();
+    _enabledOrder.addAll(['meditation', 'walking', 'dumbbells', 'guitar']);
+    _saveEnabledOrder();
     _saveActivities();
   }
 
@@ -557,6 +636,14 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
     } else {
       _activities.add(activity);
     }
+    if (activity.isEnabled) {
+      _enabledOrder.remove(activity.id);
+      _enabledOrder.add(activity.id);
+    } else {
+      _enabledOrder.remove(activity.id);
+    }
+    _sortActivitiesByOrder();
+    _saveEnabledOrder();
     _saveActivities();
     _syncTodayHistory();
   }
@@ -565,7 +652,17 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
   void updateActivity(Activity activity) {
     final index = _activities.indexWhere((a) => a.id == activity.id);
     if (index != -1) {
+      final oldActivity = _activities[index];
       _activities[index] = activity;
+
+      if (!oldActivity.isEnabled && activity.isEnabled) {
+        _enabledOrder.remove(activity.id);
+        _enabledOrder.add(activity.id);
+      } else if (oldActivity.isEnabled && !activity.isEnabled) {
+        _enabledOrder.remove(activity.id);
+      }
+      _sortActivitiesByOrder();
+      _saveEnabledOrder();
 
       // If timer is unstarted (initial), update duration immediately.
       // If timer is running or paused, leave the current session untouched.
@@ -616,6 +713,9 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
 
   @override
   bool setActivityEnabled(String activityId, bool isEnabled) {
+    if (activityId == 'guitar' && !isEnabled) {
+      return false;
+    }
     if (!isEnabled && isActivityInProgress(activityId)) {
       return false;
     }
@@ -630,8 +730,11 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
     _activities[index] = updated;
 
     if (!isEnabled) {
+      _enabledOrder.remove(activityId);
       notificationService?.cancelActivityReminders(activityId);
     } else {
+      _enabledOrder.remove(activityId);
+      _enabledOrder.add(activityId);
       final config = getReminderConfig(activityId);
       if (config.hasAnyReminder && !updated.isCompleted && !updated.isSkipped) {
         notificationService?.scheduleActivityReminders(
@@ -642,6 +745,8 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
       }
     }
 
+    _sortActivitiesByOrder();
+    _saveEnabledOrder();
     _saveActivities();
     _syncTodayHistory();
     return true;
@@ -649,16 +754,20 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
 
   @override
   bool deleteActivity(String activityId) {
+    if (activityId == 'guitar') return false;
     final activity = getActivityById(activityId);
     if (activity == null) return false;
     if (isActivityInProgress(activityId)) return false;
 
     _activities.removeWhere((a) => a.id == activityId);
+    _enabledOrder.remove(activityId);
     _reminderConfigs.remove(activityId);
     _timerControllers.remove(activityId);
     notificationService?.cancelActivityReminders(activityId);
 
+    _sortActivitiesByOrder();
     _saveActivities();
+    _saveEnabledOrder();
     _saveReminderConfigs();
     _saveTimerStates();
     _syncTodayHistory();
@@ -668,9 +777,52 @@ class SharedPreferencesActivityRepository implements ActivityRepository {
   @override
   Future<void> flush() async {
     await _saveActivities();
+    await _saveEnabledOrder();
     await _saveHistory();
     await _saveReminderConfigs();
     await _saveTimerStates();
+  }
+
+  @override
+  List<String> getEnabledActivityOrder() {
+    return List.unmodifiable(_enabledOrder);
+  }
+
+  @override
+  void reorderEnabledActivities(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= _enabledOrder.length) return;
+    if (oldIndex < newIndex) {
+      newIndex -= 1;
+    }
+    if (newIndex < 0 || newIndex >= _enabledOrder.length) return;
+    if (oldIndex == newIndex) return;
+
+    final id = _enabledOrder.removeAt(oldIndex);
+    _enabledOrder.insert(newIndex, id);
+    _sortActivitiesByOrder();
+    _saveEnabledOrder();
+    _saveActivities();
+  }
+
+  @override
+  void updateEnabledActivityOrder(List<String> orderedIds) {
+    final validEnabled = _activities.where((a) => a.isEnabled).map((a) => a.id).toSet();
+    final newOrder = <String>[];
+    for (final id in orderedIds) {
+      if (validEnabled.contains(id) && !newOrder.contains(id)) {
+        newOrder.add(id);
+      }
+    }
+    for (final act in _activities) {
+      if (act.isEnabled && !newOrder.contains(act.id)) {
+        newOrder.add(act.id);
+      }
+    }
+    _enabledOrder.clear();
+    _enabledOrder.addAll(newOrder);
+    _sortActivitiesByOrder();
+    _saveEnabledOrder();
+    _saveActivities();
   }
 
   @override
