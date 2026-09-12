@@ -60,7 +60,7 @@ void main() {
       final prefs = await SharedPreferences.getInstance();
       final controller = await ThemeController.init(prefs);
 
-      expect(controller.value, ThemeMode.light);
+      expect(controller.value, ThemeMode.dark);
 
       controller.setThemeMode(ThemeMode.system);
       expect(controller.value, ThemeMode.system);

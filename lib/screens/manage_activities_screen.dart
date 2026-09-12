@@ -274,8 +274,8 @@ class _ManageActivityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final iconBg = isDark ? const Color(0xFF20282C) : colors.primary.withValues(alpha: 0.12);
-    final iconColor = isDark ? const Color(0xFF8BCFD1) : colors.primary;
+    final iconBg = isDark ? colors.highlight : colors.primary.withValues(alpha: 0.12);
+    final iconColor = colors.primary;
     final errorColor = Theme.of(context).colorScheme.error;
 
     return Container(
@@ -286,7 +286,7 @@ class _ManageActivityCard extends StatelessWidget {
             : (isDark ? colors.card.withValues(alpha: 0.5) : colors.card.withValues(alpha: 0.65)),
         borderRadius: BorderRadius.circular(AppTheme.radiusMedium),
         border: Border.all(
-          color: isDark ? const Color(0xFF2B363C) : colors.border,
+          color: colors.border,
           width: 1,
         ),
         boxShadow: [
@@ -310,7 +310,7 @@ class _ManageActivityCard extends StatelessWidget {
                   color: iconBg,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: isDark ? const Color(0xFF2B363C) : colors.border.withValues(alpha: 0.5),
+                    color: isDark ? colors.border : colors.border.withValues(alpha: 0.5),
                     width: 1,
                   ),
                 ),

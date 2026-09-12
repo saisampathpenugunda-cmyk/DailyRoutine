@@ -290,10 +290,14 @@ void main() {
       // Delete Meditation directly
       repository.deleteActivity('meditation');
 
-      // Open Manage Activities and come back (or trigger refresh)
-      await tester.tap(find.byKey(const Key('manage_activities_button')));
+      // Open Settings -> Manage Activities and come back (or trigger refresh)
+      await tester.tap(find.byKey(const Key('settings_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('settings_manage_activities_button')));
       await tester.pumpAndSettle();
       await tester.tap(find.byKey(const Key('manage_activities_back_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('settings_back_button')));
       await tester.pumpAndSettle();
 
       // Meditation no longer appears in Today's Plan

@@ -87,22 +87,26 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Manage activities button exists in AppBar
-      final manageButton = find.byKey(const Key('manage_activities_button'));
-      expect(manageButton, findsOneWidget);
+      // Settings button exists in AppBar and leads to Manage Activities
+      final settingsButton = find.byKey(const Key('settings_button'));
+      expect(settingsButton, findsOneWidget);
 
       // Small "+" FAB still exists
       final addFab = find.byKey(const Key('add_activity_fab'));
       expect(addFab, findsOneWidget);
 
-      // Tap Manage Activities button
-      await tester.tap(manageButton);
+      // Tap Settings -> Manage Activities button
+      await tester.tap(settingsButton);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('settings_manage_activities_button')));
       await tester.pumpAndSettle();
 
       expect(find.byType(ManageActivitiesScreen), findsOneWidget);
 
       // Back to Home
       await tester.tap(find.byKey(const Key('manage_activities_back_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('settings_back_button')));
       await tester.pumpAndSettle();
 
       expect(find.byType(ManageActivitiesScreen), findsNothing);
@@ -490,8 +494,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Open Manage Activities
-      await tester.tap(find.byKey(const Key('manage_activities_button')));
+      // Open Settings -> Manage Activities
+      await tester.tap(find.byKey(const Key('settings_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('settings_manage_activities_button')));
       await tester.pumpAndSettle();
 
       // Add "Journaling"
@@ -504,6 +510,8 @@ void main() {
 
       // Back to Home
       await tester.tap(find.byKey(const Key('manage_activities_back_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('settings_back_button')));
       await tester.pumpAndSettle();
 
       // "Journaling" appears on Home

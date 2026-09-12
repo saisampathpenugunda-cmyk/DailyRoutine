@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'repositories/activity_repository.dart';
 import 'screens/home_screen.dart';
+import 'screens/main_home_screen.dart';
 import 'repositories/shared_preferences_activity_repository.dart';
 import 'theme/app_theme.dart';
 import 'services/notification_service.dart';
 import 'controllers/user_profile_controller.dart';
 import 'controllers/streak_controller.dart';
+import 'money/repositories/money_repository.dart';
+import 'money/repositories/in_memory_money_repository.dart';
+import 'money/storage/shared_preferences_money_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,30 +22,37 @@ void main() async {
   final themeController = await ThemeController.init();
   final userProfileController = await UserProfileController.init();
   final streakController = await StreakController.init(repository: activityRepository);
+  final moneyRepository = await SharedPreferencesMoneyRepository.create();
 
   runApp(DailyRoutineApp(
     repository: activityRepository,
+    moneyRepository: moneyRepository,
     notificationService: notificationService,
     themeController: themeController,
     userProfileController: userProfileController,
     streakController: streakController,
+    showMainHome: true,
   ));
 }
 
 class DailyRoutineApp extends StatefulWidget {
   final ActivityRepository repository;
+  final MoneyRepository? moneyRepository;
   final NotificationService? notificationService;
   final ThemeController? themeController;
   final UserProfileController? userProfileController;
   final StreakController? streakController;
+  final bool? showMainHome;
 
   const DailyRoutineApp({
     super.key,
     required this.repository,
+    this.moneyRepository,
     this.notificationService,
     this.themeController,
     this.userProfileController,
     this.streakController,
+    this.showMainHome,
   });
 
   @override
@@ -56,7 +67,7 @@ class _DailyRoutineAppState extends State<DailyRoutineApp> with WidgetsBindingOb
   @override
   void initState() {
     super.initState();
-    _themeController = widget.themeController ?? ThemeController(ThemeMode.light);
+    _themeController = widget.themeController ?? ThemeController(ThemeMode.dark);
     _userProfileController = widget.userProfileController ?? UserProfileController();
     _streakController = widget.streakController ??
         StreakController(repository: widget.repository);
@@ -103,12 +114,22 @@ class _DailyRoutineAppState extends State<DailyRoutineApp> with WidgetsBindingOb
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
             themeMode: currentMode,
-            home: HomeScreen(
-              repository: widget.repository,
-              notificationService: widget.notificationService,
-              userProfileController: _userProfileController,
-              streakController: _streakController,
-            ),
+            home: (widget.showMainHome ?? (widget.moneyRepository != null))
+                ? MainHomeScreen(
+                    activityRepository: widget.repository,
+                    moneyRepository:
+                        widget.moneyRepository ?? InMemoryMoneyRepository(),
+                    notificationService: widget.notificationService,
+                    userProfileController: _userProfileController,
+                    streakController: _streakController,
+                    themeController: _themeController,
+                  )
+                : HomeScreen(
+                    repository: widget.repository,
+                    notificationService: widget.notificationService,
+                    userProfileController: _userProfileController,
+                    streakController: _streakController,
+                  ),
           );
         },
       ),

@@ -146,19 +146,45 @@ class AppTheme {
   static const Color urbanZenBorder = lightBorder;
   static const Color urbanZenBarBg = lightBarBg;
 
-  // ── Cyber Noir (Dark Theme Palette - Strictly Preserved) ──────────────────
-  static const Color cyberNoirBackground = Color(0xFF101416);   // Background
-  static const Color cyberNoirSurface = Color(0xFF181E21);      // Surface
-  static const Color cyberNoirCard = Color(0xFF20282C);         // Card
-  static const Color cyberNoirPrimary = Color(0xFF8BCFD1);      // Primary
-  static const Color cyberNoirSecondary = Color(0xFF6F818B);    // Secondary
-  static const Color cyberNoirAccent = Color(0xFF00C7D4);       // Accent
-  static const Color cyberNoirTextMain = Color(0xFFF1F5F6);     // Main text
-  static const Color cyberNoirTextSecondary = Color(0xFFA5B2B8);// Secondary text
-  static const Color cyberNoirCompleted = Color(0xFF31C49A);    // Completed
-  static const Color cyberNoirSkipped = Color(0xFFE27D5F);      // Skipped/warning
-  static const Color cyberNoirBorder = Color(0xFF2B363C);       // Card/container border
-  static const Color cyberNoirBarBg = Color(0xFF1A2226);        // Track background
+  // ── Money V2 Dark Theme Palette (App-Wide Primary Dark Identity) ──────────
+  static const Color darkBackground = Color(0xFF090D16);
+  static const Color darkSurface = Color(0xFF111827);
+  static const Color darkCard = Color(0xFF162032);
+  static const Color darkPrimaryText = Color(0xFFF8FAFC);
+  static const Color darkSecondaryText = Color(0xFF94A3B8);
+  static const Color darkPrimaryAccent = Color(0xFF06B6D4);
+  static const Color darkSecondaryAccent = Color(0xFF3B82F6);
+  static const Color darkAccentGlow = Color(0xFF06B6D4);
+  static const Color darkIncome = Color(0xFF22C55E);
+  static const Color darkExpense = Color(0xFFF87171);
+  static const Color darkSavings = Color(0xFF38BDF8);
+  static const Color darkWarning = Color(0xFFFBBF24);
+  static const Color darkError = Color(0xFFEF4444);
+  static const Color darkBorder = Color(0xFF1E293B);
+  static const Color darkDivider = Color(0xFF1A2333);
+  static const Color darkProgressTrack = Color(0xFF1E293B);
+
+  static const List<Color> darkChartColors = [
+    Color(0xFF06B6D4),
+    Color(0xFF3B82F6),
+    Color(0xFF22C55E),
+    Color(0xFFFBBF24),
+    Color(0xFF6366F1),
+  ];
+
+  // ── Backward-compatible Aliases for Smooth Dark Transition ────────────────
+  static const Color cyberNoirBackground = darkBackground;
+  static const Color cyberNoirSurface = darkSurface;
+  static const Color cyberNoirCard = darkCard;
+  static const Color cyberNoirPrimary = darkPrimaryAccent;
+  static const Color cyberNoirSecondary = darkSecondaryAccent;
+  static const Color cyberNoirAccent = darkAccentGlow;
+  static const Color cyberNoirTextMain = darkPrimaryText;
+  static const Color cyberNoirTextSecondary = darkSecondaryText;
+  static const Color cyberNoirCompleted = darkIncome;
+  static const Color cyberNoirSkipped = darkWarning;
+  static const Color cyberNoirBorder = darkBorder;
+  static const Color cyberNoirBarBg = darkProgressTrack;
 
   // ── Switch Styling Constants (Polished Outlined Switch) ──────────────────
   // Light theme:
@@ -167,11 +193,11 @@ class AppTheme {
   static const Color lightSwitchTrackOutlineOff = Color(0xFFB5A8C8); // Clearly visible muted purple outline (1.4px)
   static const Color lightSwitchThumbOff = Color(0xFFA699BC);        // Muted purple/grey circular thumb (16px diameter)
 
-  // Dark theme (Cyber Noir):
-  static const Color cyberNoirSwitchTrackOutlineOn = Color(0xFF8BCFD1);  // Electric cyan outline (2.0px)
-  static const Color cyberNoirSwitchThumbOn = Color(0xFF8BCFD1);         // Vibrant cyan thumb (24px diameter)
-  static const Color cyberNoirSwitchTrackOutlineOff = Color(0xFF556873); // Muted slate outline visible on dark card (1.4px)
-  static const Color cyberNoirSwitchThumbOff = Color(0xFF6F818B);        // Muted slate thumb (16px diameter)
+  // Dark theme (Money V2 Dark Palette):
+  static const Color cyberNoirSwitchTrackOutlineOn = darkPrimaryAccent;  // Electric cyan outline (2.0px)
+  static const Color cyberNoirSwitchThumbOn = darkPrimaryAccent;         // Vibrant cyan thumb (24px diameter)
+  static const Color cyberNoirSwitchTrackOutlineOff = darkBorder;        // Dark border outline visible on dark card (1.4px)
+  static const Color cyberNoirSwitchThumbOff = darkSecondaryText;        // Slate secondary thumb (16px diameter)
 
   // ── Semantic Color Objects ───────────────────────────────────────────────
   static const AppThemeColors lightAppColors = AppThemeColors(
@@ -192,20 +218,20 @@ class AppTheme {
   );
 
   static const AppThemeColors darkAppColors = AppThemeColors(
-    primary: cyberNoirPrimary,
-    secondary: cyberNoirSecondary,
-    accent: cyberNoirAccent,
-    highlight: cyberNoirSurface,
-    background: cyberNoirBackground,
-    surface: cyberNoirSurface,
-    card: cyberNoirCard,
-    textMain: cyberNoirTextMain,
-    textSecondary: cyberNoirTextSecondary,
-    completed: cyberNoirCompleted,
-    skipped: cyberNoirSkipped,
-    missed: cyberNoirSkipped,
-    border: cyberNoirBorder,
-    barBackground: cyberNoirBarBg,
+    primary: darkPrimaryAccent,
+    secondary: darkSecondaryAccent,
+    accent: darkAccentGlow,
+    highlight: darkSurface,
+    background: darkBackground,
+    surface: darkSurface,
+    card: darkCard,
+    textMain: darkPrimaryText,
+    textSecondary: darkSecondaryText,
+    completed: darkIncome,
+    skipped: darkWarning,
+    missed: darkExpense,
+    border: darkBorder,
+    barBackground: darkProgressTrack,
   );
 
   // ── Backward-compatible Aliases for Smooth Transition ────────────────────
@@ -324,55 +350,55 @@ class AppTheme {
     );
   }
 
-  // ── Cyber Noir (Dark ThemeData) ──────────────────────────────────────────
+  // ── Money V2 (Primary Dark ThemeData) ───────────────────────────────────
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: cyberNoirBackground,
+      scaffoldBackgroundColor: darkBackground,
       colorScheme: const ColorScheme.dark(
-        primary: cyberNoirPrimary,
-        onPrimary: cyberNoirBackground,
-        primaryContainer: cyberNoirSurface,
-        onPrimaryContainer: cyberNoirPrimary,
-        secondary: cyberNoirSecondary,
+        primary: darkPrimaryAccent,
+        onPrimary: darkBackground,
+        primaryContainer: darkSurface,
+        onPrimaryContainer: darkPrimaryAccent,
+        secondary: darkSecondaryAccent,
         onSecondary: Colors.white,
-        tertiary: cyberNoirAccent,
-        surface: cyberNoirSurface,
-        onSurface: cyberNoirTextMain,
-        surfaceContainerLow: cyberNoirCard,
-        surfaceContainerHighest: cyberNoirBarBg,
-        outline: cyberNoirSecondary,
-        outlineVariant: cyberNoirBorder,
-        error: cyberNoirSkipped,
-        onError: cyberNoirBackground,
+        tertiary: darkAccentGlow,
+        surface: darkSurface,
+        onSurface: darkPrimaryText,
+        surfaceContainerLow: darkCard,
+        surfaceContainerHighest: darkProgressTrack,
+        outline: darkSecondaryAccent,
+        outlineVariant: darkBorder,
+        error: darkError,
+        onError: Colors.white,
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: cyberNoirBackground,
-        foregroundColor: cyberNoirTextMain,
+        backgroundColor: darkBackground,
+        foregroundColor: darkPrimaryText,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: false,
         titleTextStyle: TextStyle(
-          color: cyberNoirTextMain,
+          color: darkPrimaryText,
           fontSize: 20,
           fontWeight: FontWeight.w700,
           letterSpacing: -0.3,
         ),
       ),
       cardTheme: CardThemeData(
-        color: cyberNoirCard,
+        color: darkCard,
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(radiusLarge),
-          side: const BorderSide(color: cyberNoirBorder, width: borderWidth),
+          side: const BorderSide(color: darkBorder, width: borderWidth),
         ),
       ),
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-        backgroundColor: cyberNoirSurface,
-        selectedItemColor: cyberNoirPrimary,
-        unselectedItemColor: cyberNoirSecondary,
+        backgroundColor: darkSurface,
+        selectedItemColor: darkPrimaryAccent,
+        unselectedItemColor: darkSecondaryText,
         selectedLabelStyle: TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
         unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
         type: BottomNavigationBarType.fixed,
@@ -380,8 +406,8 @@ class AppTheme {
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: cyberNoirPrimary,
-          foregroundColor: cyberNoirBackground,
+          backgroundColor: darkPrimaryAccent,
+          foregroundColor: darkBackground,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusMedium),
           ),
@@ -390,8 +416,8 @@ class AppTheme {
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: cyberNoirTextMain,
-          side: const BorderSide(color: cyberNoirBorder, width: borderWidth),
+          foregroundColor: darkPrimaryText,
+          side: const BorderSide(color: darkBorder, width: borderWidth),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(radiusMedium),
           ),
@@ -414,9 +440,31 @@ class AppTheme {
         }),
       ),
       dividerTheme: const DividerThemeData(
-        color: cyberNoirBorder,
+        color: darkDivider,
         thickness: borderWidth,
         space: 1,
+      ),
+      datePickerTheme: const DatePickerThemeData(
+        backgroundColor: darkCard,
+        headerBackgroundColor: darkSurface,
+        headerForegroundColor: darkPrimaryText,
+        surfaceTintColor: Colors.transparent,
+        dividerColor: darkDivider,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: darkCard,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(radiusLarge),
+          side: const BorderSide(color: darkBorder, width: borderWidth),
+        ),
+      ),
+      bottomSheetTheme: const BottomSheetThemeData(
+        backgroundColor: darkCard,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(radiusLarge)),
+        ),
       ),
       extensions: const [darkAppColors],
     );
@@ -459,12 +507,12 @@ class ThemeController extends ValueNotifier<ThemeMode> {
     final effectivePrefs = prefs ?? await SharedPreferences.getInstance();
     final saved = effectivePrefs.getString(themeModeKey);
     final ThemeMode mode;
-    if (saved == 'dark') {
-      mode = ThemeMode.dark;
+    if (saved == 'light') {
+      mode = ThemeMode.light;
     } else if (saved == 'system') {
       mode = ThemeMode.system;
     } else {
-      mode = ThemeMode.light;
+      mode = ThemeMode.dark;
     }
     return ThemeController(mode, effectivePrefs);
   }
@@ -481,7 +529,7 @@ class ThemeScope extends InheritedNotifier<ThemeController> {
   static ThemeController of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<ThemeScope>();
     if (scope == null || scope.notifier == null) {
-      return ThemeController(ThemeMode.light);
+      return ThemeController(ThemeMode.dark);
     }
     return scope.notifier!;
   }

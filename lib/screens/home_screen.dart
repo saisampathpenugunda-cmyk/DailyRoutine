@@ -11,9 +11,7 @@ import 'dumbbells_screen.dart';
 import 'guitar_screen.dart';
 import 'history_screen.dart';
 import 'progress_screen.dart';
-import 'reminder_settings_screen.dart';
 import 'create_activity_screen.dart';
-import 'manage_activities_screen.dart';
 import 'settings_screen.dart';
 import '../services/notification_service.dart';
 import '../controllers/user_profile_controller.dart';
@@ -299,77 +297,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         elevation: 0,
         centerTitle: false,
         actions: [
-          // ── Theme Mode Toggle ─────────────────────────────────────────────
           IconButton(
-            key: const Key('theme_mode_toggle_button'),
+            key: const Key('settings_button'),
             icon: Icon(
-              isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+              Icons.settings_outlined,
               color: colors.textMain,
             ),
-            tooltip: isDark ? 'Switch to Urban Zen (Light)' : 'Switch to Cyber Noir (Dark)',
-            onPressed: () {
-              themeController.toggleTheme();
+            tooltip: 'Settings',
+            onPressed: () async {
+              await Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (context) => SettingsScreen(
+                    repository: widget.repository,
+                    notificationService: widget.notificationService,
+                    userProfileController: _userProfileController,
+                  ),
+                ),
+              );
+              await _checkRolloverAndRefresh();
             },
           ),
-          if (_currentTabIndex == 0) ...[
-            IconButton(
-              key: const Key('manage_activities_button'),
-              icon: Icon(
-                Icons.tune_rounded,
-                color: colors.textMain,
-              ),
-              tooltip: 'Manage Activities',
-              onPressed: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (context) => ManageActivitiesScreen(
-                      repository: widget.repository,
-                      notificationService: widget.notificationService,
-                    ),
-                  ),
-                );
-                await _checkRolloverAndRefresh();
-              },
-            ),
-            IconButton(
-              icon: Icon(
-                Icons.notifications_outlined,
-                color: colors.textMain,
-              ),
-              tooltip: 'Reminders',
-              onPressed: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (context) => ReminderSettingsScreen(
-                      repository: widget.repository,
-                      notificationService: widget.notificationService,
-                    ),
-                  ),
-                );
-                _loadActivities();
-              },
-            ),
-            IconButton(
-              key: const Key('settings_button'),
-              icon: Icon(
-                Icons.settings_outlined,
-                color: colors.textMain,
-              ),
-              tooltip: 'Settings',
-              onPressed: () async {
-                await Navigator.of(context).push(
-                  MaterialPageRoute<void>(
-                    builder: (context) => SettingsScreen(
-                      repository: widget.repository,
-                      notificationService: widget.notificationService,
-                      userProfileController: _userProfileController,
-                    ),
-                  ),
-                );
-                await _checkRolloverAndRefresh();
-              },
-            ),
-          ],
         ],
       ),
       body: _currentTabIndex == 0

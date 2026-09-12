@@ -13,10 +13,10 @@ void main() {
       SharedPreferences.setMockInitialValues({});
     });
 
-    test('Defaults to ThemeMode.light when no preference is saved', () async {
+    test('Defaults to ThemeMode.dark when no preference is saved', () async {
       final controller = await ThemeController.init();
-      expect(controller.value, ThemeMode.light);
-      expect(controller.isDarkMode, isFalse);
+      expect(controller.value, ThemeMode.dark);
+      expect(controller.isDarkMode, isTrue);
     });
 
     test('Restores ThemeMode.dark from SharedPreferences', () async {
@@ -60,7 +60,7 @@ void main() {
       expect(prefs.getString('activity_history'), '[]');
     });
 
-    testWidgets('ThemeScope fallback returns light ThemeController when unnested', (
+    testWidgets('ThemeScope fallback returns dark ThemeController when unnested', (
       WidgetTester tester,
     ) async {
       ThemeController? extracted;
@@ -72,7 +72,7 @@ void main() {
           },
         ),
       );
-      expect(extracted?.value, ThemeMode.light);
+      expect(extracted?.value, ThemeMode.dark);
     });
   });
 
@@ -94,24 +94,27 @@ void main() {
 
       // Initially in Light Mode
       expect(themeController.value, ThemeMode.light);
-      expect(find.byKey(const Key('theme_mode_toggle_button')), findsOneWidget);
-      expect(find.byIcon(Icons.dark_mode_outlined), findsOneWidget);
+      expect(find.byKey(const Key('settings_button')), findsOneWidget);
 
-      // Tap toggle button to switch to Dark Mode
-      await tester.tap(find.byKey(const Key('theme_mode_toggle_button')));
+      // Open Settings
+      await tester.tap(find.byKey(const Key('settings_button')));
+      await tester.pumpAndSettle();
+
+      // Tap Dark option in Settings
+      expect(find.byKey(const Key('theme_option_dark')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('theme_option_dark')));
       await tester.pumpAndSettle();
 
       // Now in Dark Mode
       expect(themeController.value, ThemeMode.dark);
-      expect(find.byIcon(Icons.light_mode_outlined), findsOneWidget);
 
-      // Tap toggle button to switch back to Light Mode
-      await tester.tap(find.byKey(const Key('theme_mode_toggle_button')));
+      // Tap Light option to switch back to Light Mode
+      expect(find.byKey(const Key('theme_option_light')), findsOneWidget);
+      await tester.tap(find.byKey(const Key('theme_option_light')));
       await tester.pumpAndSettle();
 
       // Back in Light Mode
       expect(themeController.value, ThemeMode.light);
-      expect(find.byIcon(Icons.dark_mode_outlined), findsOneWidget);
     });
 
     testWidgets('ActivityCard renders clean text without aggressive strikethrough', (
@@ -131,7 +134,7 @@ void main() {
       expect(find.byIcon(Icons.check_circle), findsWidgets);
     });
 
-    testWidgets('Theme toggle button is accessible from History and Progress tabs', (
+    testWidgets('Settings button is accessible from History and Progress tabs', (
       WidgetTester tester,
     ) async {
       final repo = InMemoryActivityRepository();
@@ -145,15 +148,17 @@ void main() {
       // Switch to History tab
       await tester.tap(find.text('History'));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('theme_mode_toggle_button')), findsOneWidget);
+      expect(find.byKey(const Key('settings_button')), findsOneWidget);
 
       // Switch to Progress tab
       await tester.tap(find.text('Progress'));
       await tester.pumpAndSettle();
-      expect(find.byKey(const Key('theme_mode_toggle_button')), findsOneWidget);
+      expect(find.byKey(const Key('settings_button')), findsOneWidget);
 
-      // Toggle theme from Progress tab
-      await tester.tap(find.byKey(const Key('theme_mode_toggle_button')));
+      // Open Settings from Progress tab and switch theme
+      await tester.tap(find.byKey(const Key('settings_button')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('theme_option_dark')));
       await tester.pumpAndSettle();
       expect(themeController.value, ThemeMode.dark);
     });
@@ -173,19 +178,30 @@ void main() {
       expect(AppTheme.lightBorder, const Color(0xFFEFECE6));
     });
 
-    test('Cyber Noir dark theme palette tokens remain strictly preserved', () {
-      expect(AppTheme.cyberNoirBackground, const Color(0xFF101416));
-      expect(AppTheme.cyberNoirSurface, const Color(0xFF181E21));
-      expect(AppTheme.cyberNoirCard, const Color(0xFF20282C));
-      expect(AppTheme.cyberNoirPrimary, const Color(0xFF8BCFD1));
-      expect(AppTheme.cyberNoirSecondary, const Color(0xFF6F818B));
-      expect(AppTheme.cyberNoirAccent, const Color(0xFF00C7D4));
-      expect(AppTheme.cyberNoirTextMain, const Color(0xFFF1F5F6));
-      expect(AppTheme.cyberNoirTextSecondary, const Color(0xFFA5B2B8));
-      expect(AppTheme.cyberNoirCompleted, const Color(0xFF31C49A));
-      expect(AppTheme.cyberNoirSkipped, const Color(0xFFE27D5F));
-      expect(AppTheme.cyberNoirBorder, const Color(0xFF2B363C));
-      expect(AppTheme.cyberNoirBarBg, const Color(0xFF1A2226));
+    test('Dark theme palette tokens match approved Money V2 specifications', () {
+      expect(AppTheme.darkBackground, const Color(0xFF090D16));
+      expect(AppTheme.darkSurface, const Color(0xFF111827));
+      expect(AppTheme.darkCard, const Color(0xFF162032));
+      expect(AppTheme.darkPrimaryText, const Color(0xFFF8FAFC));
+      expect(AppTheme.darkSecondaryText, const Color(0xFF94A3B8));
+      expect(AppTheme.darkPrimaryAccent, const Color(0xFF06B6D4));
+      expect(AppTheme.darkSecondaryAccent, const Color(0xFF3B82F6));
+      expect(AppTheme.darkAccentGlow, const Color(0xFF06B6D4));
+      expect(AppTheme.darkIncome, const Color(0xFF22C55E));
+      expect(AppTheme.darkExpense, const Color(0xFFF87171));
+      expect(AppTheme.darkSavings, const Color(0xFF38BDF8));
+      expect(AppTheme.darkWarning, const Color(0xFFFBBF24));
+      expect(AppTheme.darkError, const Color(0xFFEF4444));
+      expect(AppTheme.darkBorder, const Color(0xFF1E293B));
+      expect(AppTheme.darkDivider, const Color(0xFF1A2333));
+      expect(AppTheme.darkProgressTrack, const Color(0xFF1E293B));
+      expect(AppTheme.darkChartColors, const [
+        Color(0xFF06B6D4),
+        Color(0xFF3B82F6),
+        Color(0xFF22C55E),
+        Color(0xFFFBBF24),
+        Color(0xFF6366F1),
+      ]);
     });
 
     test('Dark theme semantic colors use cyberNoirSurface for highlight and containers', () {
