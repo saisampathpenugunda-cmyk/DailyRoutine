@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../notes/theme/notes_theme.dart';
 
 /// Semantic colors for DailyRoutine themes:
 /// - Light: "Urban Zen"
@@ -471,12 +472,23 @@ class AppTheme {
   }
 }
 
-/// Manages active [ThemeMode] and persists user selection to SharedPreferences.
+/// Manages active [ThemeMode] and V3 [NotesThemeType], persisting user selection to SharedPreferences.
 class ThemeController extends ValueNotifier<ThemeMode> {
   final SharedPreferences? _prefs;
   static const String themeModeKey = 'app_theme_mode';
+  static const String notesThemeKey = 'notes_theme_type';
 
-  ThemeController(super.value, [this._prefs]);
+  NotesThemeType _notesTheme = NotesThemeType.terracotta;
+  NotesThemeType get notesTheme => _notesTheme;
+
+  ThemeController(super.value, [this._prefs, NotesThemeType? initialNotesTheme]) {
+    if (initialNotesTheme != null) {
+      _notesTheme = initialNotesTheme;
+    } else {
+      final saved = _prefs?.getString(notesThemeKey);
+      _notesTheme = NotesThemeType.fromStorageValue(saved);
+    }
+  }
 
   bool get isDarkMode => value == ThemeMode.dark;
 
@@ -503,6 +515,13 @@ class ThemeController extends ValueNotifier<ThemeMode> {
     _prefs?.setString(themeModeKey, modeString);
   }
 
+  void setNotesTheme(NotesThemeType type) {
+    if (_notesTheme == type) return;
+    _notesTheme = type;
+    _prefs?.setString(notesThemeKey, type.storageValue);
+    notifyListeners();
+  }
+
   static Future<ThemeController> init([SharedPreferences? prefs]) async {
     final effectivePrefs = prefs ?? await SharedPreferences.getInstance();
     final saved = effectivePrefs.getString(themeModeKey);
@@ -514,7 +533,9 @@ class ThemeController extends ValueNotifier<ThemeMode> {
     } else {
       mode = ThemeMode.dark;
     }
-    return ThemeController(mode, effectivePrefs);
+    final savedNotesTheme = effectivePrefs.getString(notesThemeKey);
+    final notesTheme = NotesThemeType.fromStorageValue(savedNotesTheme);
+    return ThemeController(mode, effectivePrefs, notesTheme);
   }
 }
 

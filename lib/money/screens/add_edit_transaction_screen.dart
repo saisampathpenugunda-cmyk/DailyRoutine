@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import '../../services/notification_service.dart';
 import '../models/money_category.dart';
 import '../models/money_transaction.dart';
 import '../models/transaction_type.dart';
 import '../repositories/money_repository.dart';
+import '../services/savings_notification_helper.dart';
 import '../theme/money_theme.dart';
 import '../utils/money_formatter.dart';
 import '../validation/money_validator.dart';
@@ -11,11 +13,13 @@ import '../validation/money_validator.dart';
 class AddEditTransactionScreen extends StatefulWidget {
   final MoneyRepository repository;
   final MoneyTransaction? initialTransaction;
+  final NotificationService? notificationService;
 
   const AddEditTransactionScreen({
     super.key,
     required this.repository,
     this.initialTransaction,
+    this.notificationService,
   });
 
   @override
@@ -168,6 +172,11 @@ class _AddEditTransactionScreenState extends State<AddEditTransactionScreen> {
         MoneyValidator.validateTransaction(newTransaction);
         await widget.repository.addTransaction(newTransaction);
       }
+
+      await SavingsNotificationHelper.syncSavingsReminder(
+        repository: widget.repository,
+        notificationService: widget.notificationService,
+      );
 
       if (mounted) {
         Navigator.of(context).pop(true);

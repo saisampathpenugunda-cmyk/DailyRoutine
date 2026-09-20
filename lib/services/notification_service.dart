@@ -5,8 +5,11 @@ import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 import '../models/activity.dart';
 import '../models/reminder_config.dart';
+import '../money/utils/money_formatter.dart';
 
 abstract class NotificationService {
+  static const int savingsNotificationId = 9001;
+
   Future<void> init();
   Future<bool> requestPermissions();
   Future<void> scheduleActivityReminders(
@@ -22,6 +25,17 @@ abstract class NotificationService {
     List<Activity> activities, {
     DateTime? testNow,
   });
+
+  /// Schedules a daily reminder at [hour]:[minute] with the current accumulated savings.
+  Future<void> scheduleSavingsReminder({
+    required double currentSavings,
+    required int hour,
+    required int minute,
+    DateTime? testNow,
+  });
+
+  /// Cancels the scheduled savings reminder.
+  Future<void> cancelSavingsReminder();
 }
 
 class LocalNotificationService implements NotificationService {
@@ -307,6 +321,50 @@ class LocalNotificationService implements NotificationService {
     return scheduled;
   }
 
+  @override
+  Future<void> scheduleSavingsReminder({
+    required double currentSavings,
+    required int hour,
+    required int minute,
+    DateTime? testNow,
+  }) async {
+    await cancelSavingsReminder();
+
+    final nowLocal = testNow != null
+        ? tz.TZDateTime.from(testNow, tz.local)
+        : tz.TZDateTime.now(tz.local);
+
+    var scheduled = tz.TZDateTime(
+      tz.local,
+      nowLocal.year,
+      nowLocal.month,
+      nowLocal.day,
+      hour,
+      minute,
+    );
+
+    if (scheduled.isBefore(nowLocal)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
+
+    final formatted = MoneyFormatter.format(currentSavings);
+    await _scheduleNotification(
+      id: NotificationService.savingsNotificationId,
+      title: 'Your current savings are $formatted',
+      body: 'Keep building your savings.',
+      scheduledDate: scheduled,
+    );
+  }
+
+  @override
+  Future<void> cancelSavingsReminder() async {
+    try {
+      await _notificationsPlugin.cancel(NotificationService.savingsNotificationId);
+    } catch (e) {
+      debugPrint('Notice: cancel savings reminder: $e');
+    }
+  }
+
   String _getActivityDisplayName(String activityId) {
     switch (activityId) {
       case 'meditation':
@@ -358,6 +416,7 @@ class InMemoryNotificationService implements NotificationService {
         id: config.mainNotificationId,
         activityId: config.activityId,
         title: 'Time for ${config.activityId}!',
+        body: 'Keep your momentum going. Tap to begin your daily routine.',
         scheduledDate: scheduled,
         isBackup: false,
       );
@@ -376,6 +435,7 @@ class InMemoryNotificationService implements NotificationService {
         id: config.backupNotificationId,
         activityId: config.activityId,
         title: 'Reminder: ${config.activityId} pending',
+        body: "Don't forget your ${config.activityId} session today!",
         scheduledDate: scheduled,
         isBackup: true,
       );
@@ -423,6 +483,38 @@ class InMemoryNotificationService implements NotificationService {
     }
   }
 
+  @override
+  Future<void> scheduleSavingsReminder({
+    required double currentSavings,
+    required int hour,
+    required int minute,
+    DateTime? testNow,
+  }) async {
+    scheduledNotifications.remove(NotificationService.savingsNotificationId);
+
+    final now = testNow ?? DateTime.now();
+    var scheduled = DateTime(now.year, now.month, now.day, hour, minute);
+    if (scheduled.isBefore(now)) {
+      scheduled = scheduled.add(const Duration(days: 1));
+    }
+
+    final formatted = MoneyFormatter.format(currentSavings);
+    scheduledNotifications[NotificationService.savingsNotificationId] =
+        ScheduledTestNotification(
+      id: NotificationService.savingsNotificationId,
+      activityId: 'savings',
+      title: 'Your current savings are $formatted',
+      body: 'Keep building your savings.',
+      scheduledDate: scheduled,
+      isBackup: false,
+    );
+  }
+
+  @override
+  Future<void> cancelSavingsReminder() async {
+    scheduledNotifications.remove(NotificationService.savingsNotificationId);
+  }
+
   DateTime _calculateNextDateTime(
     int hour,
     int minute, {
@@ -442,6 +534,7 @@ class ScheduledTestNotification {
   final int id;
   final String activityId;
   final String title;
+  final String? body;
   final DateTime scheduledDate;
   final bool isBackup;
 
@@ -449,6 +542,7 @@ class ScheduledTestNotification {
     required this.id,
     required this.activityId,
     required this.title,
+    this.body,
     required this.scheduledDate,
     required this.isBackup,
   });

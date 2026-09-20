@@ -1,5 +1,6 @@
 import '../models/money_budget.dart';
 import '../models/money_category.dart';
+import '../models/money_savings.dart';
 import '../models/money_transaction.dart';
 import '../models/recurring_money_transaction.dart';
 import '../models/transaction_type.dart';
@@ -12,12 +13,14 @@ class InMemoryMoneyRepository implements MoneyRepository {
   final List<MoneyCategory> _categories = [];
   final List<MoneyBudget> _budgets = [];
   final List<RecurringMoneyTransaction> _recurringTransactions = [];
+  final List<MoneySavings> _savings = [];
 
   InMemoryMoneyRepository({
     List<MoneyTransaction>? initialTransactions,
     List<MoneyCategory>? initialCategories,
     List<MoneyBudget>? initialBudgets,
     List<RecurringMoneyTransaction>? initialRecurringTransactions,
+    List<MoneySavings>? initialSavings,
   }) {
     if (initialTransactions != null) {
       _transactions.addAll(initialTransactions);
@@ -32,6 +35,9 @@ class InMemoryMoneyRepository implements MoneyRepository {
     }
     if (initialRecurringTransactions != null) {
       _recurringTransactions.addAll(initialRecurringTransactions);
+    }
+    if (initialSavings != null) {
+      _savings.addAll(initialSavings);
     }
   }
 
@@ -58,6 +64,20 @@ class InMemoryMoneyRepository implements MoneyRepository {
       );
     }
     _transactions.add(transaction);
+
+    // Automatic 5% savings allocation for income
+    if (transaction.type == TransactionType.income) {
+      if (!_savings.any((s) => s.sourceTransactionId == transaction.id)) {
+        final savings = MoneySavings(
+          sourceTransactionId: transaction.id,
+          incomeAmount: transaction.amount,
+          savingsPercentage: 5.0,
+          date: transaction.date,
+        );
+        _savings.add(savings);
+      }
+    }
+
     return transaction;
   }
 
@@ -74,6 +94,28 @@ class InMemoryMoneyRepository implements MoneyRepository {
     MoneyValidator.validateTransactionUpdate(original, transaction);
 
     _transactions[index] = transaction;
+
+    if (transaction.type == TransactionType.income) {
+      final sIndex = _savings.indexWhere((s) => s.sourceTransactionId == transaction.id);
+      if (sIndex != -1) {
+        _savings[sIndex] = _savings[sIndex].copyWith(
+          incomeAmount: transaction.amount,
+          savingsAmount: transaction.amount * 0.05,
+          date: transaction.date,
+        );
+      } else {
+        _savings.add(MoneySavings(
+          sourceTransactionId: transaction.id,
+          incomeAmount: transaction.amount,
+          savingsPercentage: 5.0,
+          date: transaction.date,
+        ));
+      }
+    } else if (original.type == TransactionType.income && transaction.type != TransactionType.income) {
+      // Income turned into expense -> remove savings
+      _savings.removeWhere((s) => s.sourceTransactionId == transaction.id);
+    }
+
     return transaction;
   }
 
@@ -82,6 +124,7 @@ class InMemoryMoneyRepository implements MoneyRepository {
     final index = _transactions.indexWhere((t) => t.id == id);
     if (index != -1) {
       _transactions.removeAt(index);
+      _savings.removeWhere((s) => s.sourceTransactionId == id);
       return true;
     }
     return false;
@@ -252,5 +295,77 @@ class InMemoryMoneyRepository implements MoneyRepository {
       return true;
     }
     return false;
+  }
+
+  @override
+  Future<List<MoneySavings>> getSavings() async {
+    return List.unmodifiable(_savings);
+  }
+
+  @override
+  Future<MoneySavings?> getSavingsById(String id) async {
+    try {
+      return _savings.firstWhere((s) => s.id == id);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<MoneySavings?> getSavingsBySourceTransactionId(
+    String sourceTransactionId,
+  ) async {
+    try {
+      return _savings.firstWhere((s) => s.sourceTransactionId == sourceTransactionId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Future<MoneySavings> addSavings(MoneySavings savings) async {
+    if (_savings.any((s) => s.id == savings.id)) {
+      throw MoneyValidationException(
+        'Savings with ID "${savings.id}" already exists',
+      );
+    }
+    if (_savings.any((s) => s.sourceTransactionId == savings.sourceTransactionId)) {
+      throw MoneyValidationException(
+        'Savings for transaction "${savings.sourceTransactionId}" already exists',
+      );
+    }
+    _savings.add(savings);
+    return savings;
+  }
+
+  @override
+  Future<MoneySavings> updateSavings(MoneySavings savings) async {
+    final index = _savings.indexWhere((s) => s.id == savings.id);
+    if (index == -1) {
+      throw MoneyValidationException(
+        'Savings with ID "${savings.id}" not found',
+      );
+    }
+    _savings[index] = savings;
+    return savings;
+  }
+
+  @override
+  Future<bool> deleteSavings(String id) async {
+    final index = _savings.indexWhere((s) => s.id == id);
+    if (index != -1) {
+      _savings.removeAt(index);
+      return true;
+    }
+    return false;
+  }
+
+  @override
+  Future<bool> deleteSavingsBySourceTransactionId(
+    String sourceTransactionId,
+  ) async {
+    final count = _savings.where((s) => s.sourceTransactionId == sourceTransactionId).length;
+    _savings.removeWhere((s) => s.sourceTransactionId == sourceTransactionId);
+    return count > 0;
   }
 }

@@ -10,6 +10,11 @@ import 'controllers/streak_controller.dart';
 import 'money/repositories/money_repository.dart';
 import 'money/repositories/in_memory_money_repository.dart';
 import 'money/storage/shared_preferences_money_repository.dart';
+import 'notes/repositories/notes_repository.dart';
+import 'notes/repositories/in_memory_notes_repository.dart';
+import 'notes/storage/shared_preferences_notes_repository.dart';
+import 'notes/screens/timetable_screen.dart';
+import 'notes/services/widget_sync_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,10 +28,12 @@ void main() async {
   final userProfileController = await UserProfileController.init();
   final streakController = await StreakController.init(repository: activityRepository);
   final moneyRepository = await SharedPreferencesMoneyRepository.create();
+  final notesRepository = await SharedPreferencesNotesRepository.create();
 
   runApp(DailyRoutineApp(
     repository: activityRepository,
     moneyRepository: moneyRepository,
+    notesRepository: notesRepository,
     notificationService: notificationService,
     themeController: themeController,
     userProfileController: userProfileController,
@@ -38,6 +45,7 @@ void main() async {
 class DailyRoutineApp extends StatefulWidget {
   final ActivityRepository repository;
   final MoneyRepository? moneyRepository;
+  final NotesRepository? notesRepository;
   final NotificationService? notificationService;
   final ThemeController? themeController;
   final UserProfileController? userProfileController;
@@ -48,6 +56,7 @@ class DailyRoutineApp extends StatefulWidget {
     super.key,
     required this.repository,
     this.moneyRepository,
+    this.notesRepository,
     this.notificationService,
     this.themeController,
     this.userProfileController,
@@ -63,6 +72,7 @@ class _DailyRoutineAppState extends State<DailyRoutineApp> with WidgetsBindingOb
   late final ThemeController _themeController;
   late final UserProfileController _userProfileController;
   late final StreakController _streakController;
+  final GlobalKey<NavigatorState> _navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   void initState() {
@@ -72,6 +82,27 @@ class _DailyRoutineAppState extends State<DailyRoutineApp> with WidgetsBindingOb
     _streakController = widget.streakController ??
         StreakController(repository: widget.repository);
     WidgetsBinding.instance.addObserver(this);
+
+    WidgetSyncService.initialize(
+      onRoute: (route) {
+        if (route == 'timetable') {
+          _openTimetable();
+        }
+      },
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final route = await WidgetSyncService.getInitialRoute();
+      if (route == 'timetable') {
+        _openTimetable();
+      }
+    });
+  }
+
+  void _openTimetable() {
+    _navigatorKey.currentState?.push(
+      MaterialPageRoute(builder: (_) => const TimetableScreen()),
+    );
   }
 
   @override
@@ -94,6 +125,7 @@ class _DailyRoutineAppState extends State<DailyRoutineApp> with WidgetsBindingOb
     if (state == AppLifecycleState.resumed) {
       await widget.repository.checkDateRollover();
       _streakController.recalculate();
+      WidgetSyncService.updateWidget();
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
       await widget.repository.checkDateRollover();
       _streakController.recalculate();
@@ -109,6 +141,7 @@ class _DailyRoutineAppState extends State<DailyRoutineApp> with WidgetsBindingOb
         valueListenable: _themeController,
         builder: (context, currentMode, _) {
           return MaterialApp(
+            navigatorKey: _navigatorKey,
             title: 'Daily Routine',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
@@ -119,6 +152,8 @@ class _DailyRoutineAppState extends State<DailyRoutineApp> with WidgetsBindingOb
                     activityRepository: widget.repository,
                     moneyRepository:
                         widget.moneyRepository ?? InMemoryMoneyRepository(),
+                    notesRepository:
+                        widget.notesRepository ?? InMemoryNotesRepository(),
                     notificationService: widget.notificationService,
                     userProfileController: _userProfileController,
                     streakController: _streakController,

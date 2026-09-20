@@ -1,23 +1,100 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../../services/notification_service.dart';
 import '../../theme/app_theme.dart';
 import '../repositories/money_repository.dart';
+import '../services/savings_notification_helper.dart';
 import '../theme/money_theme.dart';
 import 'budgets_screen.dart';
 import 'categories_screen.dart';
 import 'monthly_view_screen.dart';
 import 'recurring_transactions_screen.dart';
+import 'savings_screen.dart';
 import 'statistics_screen.dart';
 import 'transactions_screen.dart';
 
 /// Dedicated Money Settings screen providing access to Money features,
-/// app-wide theme customization, and future money-specific preferences.
-class MoneySettingsScreen extends StatelessWidget {
+/// savings allocations, notifications, app-wide theme customization,
+/// and money-specific preferences.
+class MoneySettingsScreen extends StatefulWidget {
   final MoneyRepository repository;
+  final NotificationService? notificationService;
 
   const MoneySettingsScreen({
     super.key,
     required this.repository,
+    this.notificationService,
   });
+
+  @override
+  State<MoneySettingsScreen> createState() => _MoneySettingsScreenState();
+}
+
+class _MoneySettingsScreenState extends State<MoneySettingsScreen> {
+  bool _savingsReminderEnabled = true;
+  int _savingsReminderHour = SavingsNotificationHelper.defaultHour;
+  int _savingsReminderMinute = SavingsNotificationHelper.defaultMinute;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadNotificationPreferences();
+  }
+
+  Future<void> _loadNotificationPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
+    setState(() {
+      _savingsReminderEnabled =
+          prefs.getBool(SavingsNotificationHelper.prefEnabledKey) ?? true;
+      _savingsReminderHour =
+          prefs.getInt(SavingsNotificationHelper.prefHourKey) ??
+              SavingsNotificationHelper.defaultHour;
+      _savingsReminderMinute =
+          prefs.getInt(SavingsNotificationHelper.prefMinuteKey) ??
+              SavingsNotificationHelper.defaultMinute;
+    });
+  }
+
+  Future<void> _updateSavingsReminder() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(
+        SavingsNotificationHelper.prefEnabledKey, _savingsReminderEnabled);
+    await prefs.setInt(
+        SavingsNotificationHelper.prefHourKey, _savingsReminderHour);
+    await prefs.setInt(
+        SavingsNotificationHelper.prefMinuteKey, _savingsReminderMinute);
+
+    await SavingsNotificationHelper.syncSavingsReminder(
+      repository: widget.repository,
+      notificationService: widget.notificationService,
+    );
+  }
+
+  Future<void> _pickReminderTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(
+        hour: _savingsReminderHour,
+        minute: _savingsReminderMinute,
+      ),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _savingsReminderHour = picked.hour;
+        _savingsReminderMinute = picked.minute;
+      });
+      await _updateSavingsReminder();
+    }
+  }
+
+  String _formatTimeOfDay(int hour, int minute) {
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final h = hour % 12 == 0 ? 12 : hour % 12;
+    final m = minute.toString().padLeft(2, '0');
+    return '$h:$m $period';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -136,7 +213,23 @@ class MoneySettingsScreen extends StatelessWidget {
                     colors: colors,
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => TransactionsScreen(repository: repository),
+                        builder: (_) => TransactionsScreen(repository: widget.repository),
+                      ),
+                    ),
+                  ),
+                  Divider(height: 1, color: colors.border),
+                  _buildNavTile(
+                    key: const Key('money_settings_savings_tile'),
+                    icon: Icons.savings_outlined,
+                    title: 'Savings',
+                    subtitle: '5% automatic savings on income',
+                    colors: colors,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => SavingsScreen(
+                          repository: widget.repository,
+                          notificationService: widget.notificationService,
+                        ),
                       ),
                     ),
                   ),
@@ -149,7 +242,7 @@ class MoneySettingsScreen extends StatelessWidget {
                     colors: colors,
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => CategoriesScreen(repository: repository),
+                        builder: (_) => CategoriesScreen(repository: widget.repository),
                       ),
                     ),
                   ),
@@ -162,7 +255,7 @@ class MoneySettingsScreen extends StatelessWidget {
                     colors: colors,
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => StatisticsScreen(repository: repository),
+                        builder: (_) => StatisticsScreen(repository: widget.repository),
                       ),
                     ),
                   ),
@@ -175,7 +268,7 @@ class MoneySettingsScreen extends StatelessWidget {
                     colors: colors,
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => MonthlyViewScreen(repository: repository),
+                        builder: (_) => MonthlyViewScreen(repository: widget.repository),
                       ),
                     ),
                   ),
@@ -188,7 +281,7 @@ class MoneySettingsScreen extends StatelessWidget {
                     colors: colors,
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => BudgetsScreen(repository: repository),
+                        builder: (_) => BudgetsScreen(repository: widget.repository),
                       ),
                     ),
                   ),
@@ -201,7 +294,7 @@ class MoneySettingsScreen extends StatelessWidget {
                     colors: colors,
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => StatisticsScreen(repository: repository),
+                        builder: (_) => StatisticsScreen(repository: widget.repository),
                       ),
                     ),
                   ),
@@ -214,7 +307,7 @@ class MoneySettingsScreen extends StatelessWidget {
                     colors: colors,
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => RecurringTransactionsScreen(repository: repository),
+                        builder: (_) => RecurringTransactionsScreen(repository: widget.repository),
                       ),
                     ),
                   ),
@@ -224,7 +317,123 @@ class MoneySettingsScreen extends StatelessWidget {
 
             const SizedBox(height: 24),
 
-            // ── Section 3: Money Preferences ─────────────────────────────────
+            // ── Section 3: Savings Notifications ─────────────────────────────
+            _buildSectionHeader('SAVINGS NOTIFICATIONS', colors),
+            const SizedBox(height: 10),
+            Container(
+              decoration: BoxDecoration(
+                color: colors.card,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: colors.border),
+              ),
+              child: Column(
+                children: [
+                  SwitchListTile.adaptive(
+                    key: const Key('money_settings_savings_notification_toggle'),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+                    secondary: Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: colors.surface,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: colors.border),
+                      ),
+                      child: Icon(
+                        Icons.notifications_active_outlined,
+                        color: colors.primaryAccent,
+                        size: 20,
+                      ),
+                    ),
+                    title: Text(
+                      'Daily Savings Reminder',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        color: colors.textPrimary,
+                      ),
+                    ),
+                    subtitle: Text(
+                      'Notify daily with your total accumulated savings',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                    value: _savingsReminderEnabled,
+                    activeThumbColor: colors.primaryAccent,
+                    onChanged: (val) async {
+                      setState(() => _savingsReminderEnabled = val);
+                      await _updateSavingsReminder();
+                    },
+                  ),
+                  if (_savingsReminderEnabled) ...[
+                    Divider(height: 1, color: colors.border),
+                    InkWell(
+                      key: const Key('money_settings_savings_notification_time_tile'),
+                      borderRadius: const BorderRadius.vertical(bottom: Radius.circular(16)),
+                      onTap: _pickReminderTime,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 40,
+                              height: 40,
+                              decoration: BoxDecoration(
+                                color: colors.surface,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: colors.border),
+                              ),
+                              child: Icon(
+                                Icons.access_time_rounded,
+                                color: colors.primaryAccent,
+                                size: 20,
+                              ),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Reminder Time',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                      color: colors.textPrimary,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    _formatTimeOfDay(_savingsReminderHour, _savingsReminderMinute),
+                                    key: const Key('money_settings_savings_notification_time_text'),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: colors.primaryAccent,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Icon(
+                              Icons.chevron_right,
+                              size: 20,
+                              color: colors.textSecondary,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 24),
+
+            // ── Section 4: Money Preferences ─────────────────────────────────
             _buildSectionHeader('MONEY PREFERENCES', colors),
             const SizedBox(height: 10),
             Container(
@@ -302,58 +511,15 @@ class MoneySettingsScreen extends StatelessWidget {
   }
 
   Widget _buildSectionHeader(String title, MoneyColors colors) {
-    return Text(
-      title,
-      style: TextStyle(
-        fontSize: 12,
-        fontWeight: FontWeight.w700,
-        letterSpacing: 1.2,
-        color: colors.textSecondary,
-      ),
-    );
-  }
-
-  Widget _buildThemeOption({
-    required Key key,
-    required String label,
-    required IconData icon,
-    required bool isSelected,
-    required MoneyColors colors,
-    required VoidCallback onTap,
-  }) {
-    return InkWell(
-      key: key,
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: isSelected ? colors.primaryAccent : colors.surface,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isSelected ? colors.primaryAccent : colors.border,
-            width: isSelected ? 1.5 : 1.0,
-          ),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 18,
-              color: isSelected ? Colors.white : colors.textSecondary,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected ? Colors.white : colors.textPrimary,
-              ),
-            ),
-          ],
+    return Padding(
+      padding: const EdgeInsets.only(left: 4.0),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 1.1,
+          color: colors.textSecondary,
         ),
       ),
     );
@@ -370,7 +536,7 @@ class MoneySettingsScreen extends StatelessWidget {
     return ListTile(
       key: key,
       onTap: onTap,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
       leading: Container(
         width: 40,
         height: 40,
@@ -397,9 +563,50 @@ class MoneySettingsScreen extends StatelessWidget {
         ),
       ),
       trailing: Icon(
-        Icons.chevron_right_rounded,
-        color: colors.textSecondary,
+        Icons.chevron_right,
         size: 20,
+        color: colors.textSecondary,
+      ),
+    );
+  }
+
+  Widget _buildThemeOption({
+    required Key key,
+    required String label,
+    required IconData icon,
+    required bool isSelected,
+    required MoneyColors colors,
+    required VoidCallback onTap,
+  }) {
+    final borderColor = isSelected ? colors.primaryAccent : colors.border;
+    final bgColor = isSelected ? colors.primaryAccent.withValues(alpha: 0.12) : colors.surface;
+    final textColor = isSelected ? colors.primaryAccent : colors.textPrimary;
+
+    return InkWell(
+      key: key,
+      borderRadius: BorderRadius.circular(12),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 12.0),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: borderColor, width: isSelected ? 2.0 : 1.0),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: textColor, size: 22),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                color: textColor,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

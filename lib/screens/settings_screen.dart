@@ -3,6 +3,7 @@ import '../controllers/user_profile_controller.dart';
 import '../repositories/activity_repository.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
+import '../notes/screens/notes_theme_screen.dart';
 import 'manage_activities_screen.dart';
 import 'reminder_settings_screen.dart';
 
@@ -343,7 +344,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
             const SizedBox(height: 24),
 
-            // ── Section 5: About ────────────────────────────────────────────
+            // ── Section 5: Notes ────────────────────────────────────────────
+            _buildSectionHeader('NOTES', colors),
+            const SizedBox(height: 8),
+            _buildActionTile(
+              key: const Key('settings_notes_theme_button'),
+              icon: Icons.palette_outlined,
+              title: 'Notes Theme',
+              subtitle: themeController.notesTheme.displayName,
+              colors: colors,
+              isDark: isDark,
+              onTap: () async {
+                await Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (context) => const NotesThemeScreen(),
+                  ),
+                );
+              },
+            ),
+
+            const SizedBox(height: 24),
+
+            // ── Section 6: About ────────────────────────────────────────────
             _buildSectionHeader('ABOUT', colors),
             const SizedBox(height: 8),
             Container(

@@ -5,9 +5,11 @@ import '../../services/notification_service.dart';
 import 'money_settings_screen.dart';
 import '../models/money_budget.dart';
 import '../models/money_category.dart';
+import '../models/money_savings.dart';
 import '../models/money_transaction.dart';
 import '../repositories/money_repository.dart';
 import '../services/money_calculator.dart';
+import '../services/savings_notification_helper.dart';
 import '../theme/money_theme.dart';
 import '../utils/money_formatter.dart';
 import 'add_edit_transaction_screen.dart';
@@ -15,6 +17,7 @@ import 'budgets_screen.dart';
 import 'categories_screen.dart';
 import 'monthly_view_screen.dart';
 import 'recurring_transactions_screen.dart';
+import 'savings_screen.dart';
 import 'statistics_screen.dart';
 import 'transactions_screen.dart';
 import '../services/recurring_transaction_service.dart';
@@ -42,6 +45,7 @@ class _MoneyDashboardScreenState extends State<MoneyDashboardScreen> {
   List<MoneyTransaction> _transactions = [];
   List<MoneyBudget> _monthBudgets = [];
   List<MoneyCategory> _categories = [];
+  List<MoneySavings> _savings = [];
   bool _isLoading = true;
 
   @override
@@ -57,11 +61,13 @@ class _MoneyDashboardScreenState extends State<MoneyDashboardScreen> {
     final transactionsFuture = widget.repository.getTransactions();
     final budgetsFuture = widget.repository.getBudgets(year: now.year, month: now.month);
     final categoriesFuture = widget.repository.getCategories();
+    final savingsFuture = widget.repository.getSavings();
 
     final results = await Future.wait([
       transactionsFuture,
       budgetsFuture,
       categoriesFuture,
+      savingsFuture,
     ]);
 
     if (!mounted) return;
@@ -78,14 +84,23 @@ class _MoneyDashboardScreenState extends State<MoneyDashboardScreen> {
       _transactions = sorted;
       _monthBudgets = results[1] as List<MoneyBudget>;
       _categories = results[2] as List<MoneyCategory>;
+      _savings = results[3] as List<MoneySavings>;
       _isLoading = false;
     });
+
+    await SavingsNotificationHelper.syncSavingsReminder(
+      repository: widget.repository,
+      notificationService: widget.notificationService,
+    );
   }
 
   Future<void> _openAddTransaction() async {
     final result = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
-        builder: (_) => AddEditTransactionScreen(repository: widget.repository),
+        builder: (_) => AddEditTransactionScreen(
+          repository: widget.repository,
+          notificationService: widget.notificationService,
+        ),
       ),
     );
     if (result == true) {
@@ -99,6 +114,7 @@ class _MoneyDashboardScreenState extends State<MoneyDashboardScreen> {
         builder: (_) => AddEditTransactionScreen(
           repository: widget.repository,
           initialTransaction: transaction,
+          notificationService: widget.notificationService,
         ),
       ),
     );
@@ -161,11 +177,24 @@ class _MoneyDashboardScreenState extends State<MoneyDashboardScreen> {
     await _loadData();
   }
 
+  Future<void> _openSavings() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => SavingsScreen(
+          repository: widget.repository,
+          notificationService: widget.notificationService,
+        ),
+      ),
+    );
+    await _loadData();
+  }
+
   Future<void> _openSettings() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => MoneySettingsScreen(
           repository: widget.repository,
+          notificationService: widget.notificationService,
         ),
       ),
     );
@@ -200,6 +229,7 @@ class _MoneyDashboardScreenState extends State<MoneyDashboardScreen> {
     final totalIncome = MoneyCalculator.calculateTotalIncome(_transactions);
     final totalExpenses = MoneyCalculator.calculateTotalExpenses(_transactions);
     final totalSavings = MoneyCalculator.calculateSavings(_transactions);
+    final totalAutoSaved = MoneyCalculator.calculateTotalSavingsAllocations(_savings);
 
     final now = DateTime.now();
     final monthTransactions = MoneyCalculator.filterByMonth(
@@ -210,6 +240,11 @@ class _MoneyDashboardScreenState extends State<MoneyDashboardScreen> {
     final monthIncome = MoneyCalculator.calculateTotalIncome(monthTransactions);
     final monthExpenses = MoneyCalculator.calculateTotalExpenses(monthTransactions);
     final monthSavings = MoneyCalculator.calculateSavings(monthTransactions);
+    final monthAutoSaved = MoneyCalculator.calculateMonthlySavingsAllocations(
+      _savings,
+      year: now.year,
+      month: now.month,
+    );
 
     final budgetSummary = MoneyCalculator.calculateMonthlyBudgetSummary(
       budgets: _monthBudgets,
@@ -330,6 +365,10 @@ class _MoneyDashboardScreenState extends State<MoneyDashboardScreen> {
 
                     // 5. MONEY NAVIGATION HUB
                     _buildMoneyNavigation(colors),
+                    const SizedBox(height: 16),
+
+                    // AUTO-SAVED 5% CARD
+                    _buildAutoSavedCard(totalAutoSaved, monthAutoSaved, colors),
                     const SizedBox(height: 24),
 
                     // 6. MONTHLY SUMMARY CARD
@@ -1150,6 +1189,103 @@ class _MoneyDashboardScreenState extends State<MoneyDashboardScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAutoSavedCard(
+    double totalAutoSaved,
+    double monthAutoSaved,
+    MoneyColors colors,
+  ) {
+    return InkWell(
+      key: const Key('dashboard_auto_saved_card'),
+      onTap: _openSavings,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: colors.card,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: colors.primaryAccent.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: colors.primaryAccent.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                Icons.savings_rounded,
+                color: colors.primaryAccent,
+                size: 24,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Auto-Saved (5%)',
+                        style: TextStyle(
+                          color: colors.textSecondary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: colors.income.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          '5% Income',
+                          style: TextStyle(
+                            color: colors.income,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    _formatCurrency(totalAutoSaved),
+                    key: const Key('dashboard_auto_saved_amount'),
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: -0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '+${_formatCurrency(monthAutoSaved)} this month',
+                    style: TextStyle(
+                      color: colors.textSecondary,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right_rounded,
+              color: colors.textSecondary,
+              size: 22,
+            ),
+          ],
         ),
       ),
     );

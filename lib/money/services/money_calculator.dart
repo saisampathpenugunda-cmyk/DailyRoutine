@@ -1,5 +1,6 @@
 import '../models/money_budget.dart';
 import '../models/money_category.dart';
+import '../models/money_savings.dart';
 import '../models/money_transaction.dart';
 import '../models/transaction_type.dart';
 
@@ -758,6 +759,82 @@ class MoneyCalculator {
     }
 
     return List.unmodifiable(result);
+  }
+
+  /// Sums all savings allocations.
+  static double calculateTotalSavingsAllocations(Iterable<MoneySavings> savings) {
+    double total = 0.0;
+    for (final s in savings) {
+      total += s.savingsAmount;
+    }
+    return _round(total);
+  }
+
+  /// Sums savings allocations for a specific [year] and [month].
+  static double calculateMonthlySavingsAllocations(
+    Iterable<MoneySavings> savings, {
+    required int year,
+    required int month,
+  }) {
+    double total = 0.0;
+    for (final s in savings) {
+      if (s.date.year == year && s.date.month == month) {
+        total += s.savingsAmount;
+      }
+    }
+    return _round(total);
+  }
+
+  /// Sums savings allocations within an inclusive date range [start]..[end].
+  static double calculateSavingsAllocationsForRange(
+    Iterable<MoneySavings> savings, {
+    required DateTime start,
+    required DateTime end,
+  }) {
+    final sDate = DateTime(start.year, start.month, start.day);
+    final eDate = DateTime(end.year, end.month, end.day);
+    double total = 0.0;
+    for (final s in savings) {
+      final cur = DateTime(s.date.year, s.date.month, s.date.day);
+      if (!cur.isBefore(sDate) && !cur.isAfter(eDate)) {
+        total += s.savingsAmount;
+      }
+    }
+    return _round(total);
+  }
+
+  /// Counts the total number of savings allocations.
+  static int countSavingsAllocations(Iterable<MoneySavings> savings) {
+    return savings.length;
+  }
+
+  /// Finds the savings allocation linked to a specific [incomeTransactionId], if any.
+  static MoneySavings? findSavingsForIncome(
+    Iterable<MoneySavings> savings,
+    String incomeTransactionId,
+  ) {
+    try {
+      return savings.firstWhere((s) => s.sourceTransactionId == incomeTransactionId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Returns savings allocations for [year] and [month], sorted newest first.
+  static List<MoneySavings> savingsAllocationsForMonth(
+    Iterable<MoneySavings> savings, {
+    required int year,
+    required int month,
+  }) {
+    final filtered = savings
+        .where((s) => s.date.year == year && s.date.month == month)
+        .toList();
+    filtered.sort((a, b) {
+      final dateCmp = b.date.compareTo(a.date);
+      if (dateCmp != 0) return dateCmp;
+      return b.createdAt.compareTo(a.createdAt);
+    });
+    return List.unmodifiable(filtered);
   }
 
   static MoneyCategory? _findCategory(Iterable<MoneyCategory> categories, String categoryId) {

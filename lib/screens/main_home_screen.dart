@@ -10,6 +10,10 @@ import '../money/utils/money_formatter.dart';
 import '../repositories/activity_repository.dart';
 import '../services/notification_service.dart';
 import '../theme/app_theme.dart';
+import '../notes/repositories/notes_repository.dart';
+import '../notes/repositories/in_memory_notes_repository.dart';
+import '../notes/screens/notes_screen.dart';
+import '../notes/theme/notes_theme.dart';
 import 'home_screen.dart';
 import 'settings_screen.dart';
 
@@ -17,6 +21,7 @@ import 'settings_screen.dart';
 class MainHomeScreen extends StatefulWidget {
   final ActivityRepository activityRepository;
   final MoneyRepository moneyRepository;
+  final NotesRepository? notesRepository;
   final NotificationService? notificationService;
   final UserProfileController? userProfileController;
   final StreakController? streakController;
@@ -27,6 +32,7 @@ class MainHomeScreen extends StatefulWidget {
     super.key,
     required this.activityRepository,
     required this.moneyRepository,
+    this.notesRepository,
     this.notificationService,
     this.userProfileController,
     this.streakController,
@@ -41,17 +47,21 @@ class MainHomeScreen extends StatefulWidget {
 class _MainHomeScreenState extends State<MainHomeScreen> with WidgetsBindingObserver {
   late UserProfileController _userProfileController;
   late StreakController _streakController;
+  late final NotesRepository _notesRepository;
   Timer? _greetingTimer;
 
   int _activitiesCompletedCount = 0;
   int _activitiesEnabledCount = 0;
   double _moneyBalance = 0.0;
+  int _studyTaskCount = 0;
+  int _textNoteCount = 0;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _notesRepository = widget.notesRepository ?? InMemoryNotesRepository();
     _userProfileController = widget.userProfileController ?? UserProfileController();
     _userProfileController.addListener(_onStateUpdated);
 
@@ -109,11 +119,16 @@ class _MainHomeScreenState extends State<MainHomeScreen> with WidgetsBindingObse
     final transactions = await widget.moneyRepository.getTransactions();
     final balance = MoneyCalculator.calculateBalance(transactions);
 
+    final studyTasks = await _notesRepository.getStudyTasks();
+    final textNotes = await _notesRepository.getTextNotes();
+
     if (!mounted) return;
     setState(() {
       _activitiesEnabledCount = enabled.length;
       _activitiesCompletedCount = completed;
       _moneyBalance = balance;
+      _studyTaskCount = studyTasks.length;
+      _textNoteCount = textNotes.length;
       _isLoading = false;
     });
   }
@@ -140,6 +155,17 @@ class _MainHomeScreenState extends State<MainHomeScreen> with WidgetsBindingObse
           activityRepository: widget.activityRepository,
           notificationService: widget.notificationService,
           userProfileController: _userProfileController,
+        ),
+      ),
+    );
+    _loadSummaries();
+  }
+
+  Future<void> _openNotes() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => NotesScreen(
+          repository: _notesRepository,
         ),
       ),
     );
@@ -262,6 +288,30 @@ class _MainHomeScreenState extends State<MainHomeScreen> with WidgetsBindingObse
                       iconColor: moneyColors.primaryAccent,
                       accentText: 'Dashboard',
                       onTap: _openMoney,
+                    ),
+                    const SizedBox(height: 24),
+
+                    // SECTION: YOUR NOTES
+                    GestureDetector(
+                      onTap: _openNotes,
+                      child: Text(
+                        'Your Notes',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                              color: colors.textMain,
+                            ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    _buildModuleCard(
+                      title: 'Notes',
+                      subtitle:
+                          '$_studyTaskCount ${_studyTaskCount == 1 ? 'task' : 'tasks'}, $_textNoteCount ${_textNoteCount == 1 ? 'note' : 'notes'}',
+                      icon: Icons.description_outlined,
+                      iconColor: NotesTheme.of(context).primary,
+                      accentText: 'View',
+                      onTap: _openNotes,
                     ),
                   ],
                 ),
